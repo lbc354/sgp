@@ -1,0 +1,39 @@
+{% extends 'global/base.html' %}
+
+{% block title %}
+  Profile
+{% endblock %}
+
+{% block content %}
+  <div class="card mx-auto">
+    <div class="ms-auto m-2 position-relative">
+      <a class="btn btn-light border position-absolute top-50 end-0" href="{% url 'profile' %}" role="button">Editar</a>
+    </div>
+    <div class="card-body text-center">
+        <i class="bi bi-person-circle" style="font-size: 2rem;"></i>
+      <p class="mt-2">{{ user.email }}</p>
+      <p class="mb-4">{{ user.unidade|default_if_none:'' }}</p>
+      {% if not user.mfa_enabled %}
+        <hr />
+        <h2 class="my-4">Ative MFA com o App Autenticador</h2>
+        <div>
+          <form method="POST" action="{% url 'mfa' %}" class="form text-center">
+            {% csrf_token %}
+            <div class="form-group text-">
+              <div class="mx-auto col-sm-3">
+                <input type="text" id="otp_code" name="otp_code" maxlength="6" required class="form-control" placeholder="Código" />
+              </div>
+            </div>
+            <input type="hidden" name="user_id" value="{{ user.id }}" />
+            <button class="btn btn-primary mt-3" type="submit">Verificar</button>
+          </form>
+          <div class="col-sm-3 mx-auto">
+            <img style="width: 100%;" src="{{ qrcode }}" alt="{{ img_path }}" />
+          </div>
+        </div>
+      {% else %}
+        {% comment %} <a href="{% url 'disable_mfa' %}" class="btn btn-danger disabled" hidden>Desativar MFA</a> {% endcomment %}
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

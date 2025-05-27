@@ -1,0 +1,33 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    {% include 'global/partials/head.html' %}
+    <title>
+      APP |{% block title %}
+
+      {% endblock %}
+    </title>
+  </head>
+
+  <body>
+    {% if not user.is_authenticated %}
+      <img src="{% static 'img/tall-trees-forest-mountains-covered-with-fog.jpg' %}" alt="wallpaper" class="wallpaper" />
+      <div class="wallpaper-shadow"></div>
+    {% endif %}
+
+    {% if user.is_authenticated %}
+      {% include 'global/partials/header.html' %}
+    {% endif %}
+
+    <div class="container mt-5">
+      {% block content %}
+
+      {% endblock %}
+    </div>
+
+    {% include 'global/partials/fade_message.html' %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js" integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq" crossorigin="anonymous"></script>
+  </body>
+</html>

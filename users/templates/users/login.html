@@ -1,0 +1,27 @@
+{% extends 'global/base.html' %}
+
+{% block title %}
+  Login
+{% endblock %}
+
+{% block content %}
+  <div class="card col-md-6 mx-auto">
+    <div class="card-body">
+      <h1 class="card-title mb-3">Login</h1>
+      <form class="row g-3" action="{{ form_action }}" method="POST">
+        {% csrf_token %}
+        {% for field in form %}
+          {{ field }}
+        {% endfor %}
+        {% if field.errors %}
+          <div class="text-danger">
+            {% for error in field.errors %}
+              <small>{{ error }}</small>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <button type="submit" class="btn btn-primary col-md-12">Confirm</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
