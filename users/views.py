@@ -1,10 +1,14 @@
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login, logout, get_user_model
+from django.contrib.auth import login, logout, get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render, resolve_url
 from django.urls import reverse
-from users.forms import CustomAuthenticationForm
+from users.forms import (
+    CustomAuthenticationForm,
+    CustomUserChangeForm,
+    CustomPasswordChangeForm,
+)
 import pyotp
 import qrcode
 import io
@@ -18,6 +22,7 @@ def home(request):
 
 def logout_action(request):
     logout(request)
+    messages.info(request, "User logged out")
     return redirect("login")
 
 
@@ -100,6 +105,21 @@ def verify_default_password(request):
         return redirect("change_password")
 
 
+def verify_mfa_otp(user, otp):
+    # create a totp object using the user's mfa secret
+    totp = pyotp.TOTP(user.mfa_secret)
+
+    # verify the provided otp
+    if totp.verify(otp):
+        # if otp is valid, enable mfa and return true
+        user.mfa_enabled = True
+        user.save()
+        return True
+
+    # if otp is invalid, return false
+    return False
+
+
 def mfa(request):
     form_mfa_action = reverse("mfa")
 
@@ -122,7 +142,7 @@ def mfa(request):
         # if true
         if verify_mfa_otp(user, otp):
             # user in profile page activating mfa
-            if request.user.is_authenticated:
+            if request.user and request.user.is_authenticated:
                 messages.success(request, "MFA activated")
                 return redirect("profile")
 
@@ -140,7 +160,7 @@ def mfa(request):
             messages.error(request, "Invalid code, try again")
 
             # user in profile page failed activating mfa
-            if request.user.is_authenticated:
+            if request.user and request.user.is_authenticated:
                 return redirect("profile")
 
             # user in mfa page failed authenticating
@@ -152,21 +172,6 @@ def mfa(request):
 
     # if GET method
     return redirect("login")
-
-
-def verify_mfa_otp(user, otp):
-    # create a totp object using the user's mfa secret
-    totp = pyotp.TOTP(user.mfa_secret)
-
-    # verify the provided otp
-    if totp.verify(otp):
-        # if otp is valid, enable mfa and return true
-        user.mfa_enabled = True
-        user.save()
-        return True
-
-    # if otp is invalid, return false
-    return False
 
 
 @login_required
@@ -182,7 +187,7 @@ def profile(request):
     # name=user.email -> shows user's email in authenticator app.
     # issuer_name="app_name" -> shows application's name in authenticator app
     otp_uri = pyotp.totp.TOTP(user.mfa_secret).provisioning_uri(
-        name=user.email, issuer_name="idk_app"
+        name=user.email, issuer_name="sgp_app"
     )
 
     # generates a qr code from "otpauth://totp/..." uri
@@ -204,3 +209,56 @@ def profile(request):
     qr_code_data_uri = f"data:image/png;base64,{qr_code}"
     # passes the base64-encoded image of the qr code to the template in the 'qrcode' variable
     return render(request, "users/profile.html", {"qrcode": qr_code_data_uri})
+
+
+@login_required
+def edit_action(request, user_id=None):
+    user = get_user_model().objects.get(id=user_id) if user_id else request.user
+    return_page_action = reverse("active_users") if user_id else reverse("profile")
+
+    # if an user without permissions (we still have to check the permissions) is trying to access the edit page of an user other than himself, do not allow
+    if request.user and request.user.id != user.id:
+        messages.error(request, "Without permissions")
+        return redirect("profile")
+
+    if request.method == "POST":
+        form = CustomUserChangeForm(request.POST, instance=user, request=request)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "User edited")
+            return redirect("active_users") if user_id else redirect("profile")
+    else:
+        form = CustomUserChangeForm(instance=user, request=request)
+
+    return render(
+        request,
+        "users/edit.html",
+        {
+            "form": form,
+            "user": user,
+            "return_page_action": return_page_action,
+        },
+    )
+
+
+# view to change password via profile form
+@login_required
+def change_password(request):
+    return_page_action = reverse("edit")
+    if request.method == "POST":
+        form = CustomPasswordChangeForm(user=request.user, data=request.POST)
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(
+                request, user
+            )  # keeps user logged in after changes
+            messages.success(request, "Password updated")
+            return redirect("profile")
+    else:
+        form = CustomPasswordChangeForm(user=request.user)
+
+    return render(
+        request,
+        "users/change_password.html",
+        {"form": form, "return_page_action": return_page_action},
+    )

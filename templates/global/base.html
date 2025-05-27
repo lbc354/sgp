@@ -12,15 +12,22 @@
 
   <body>
     {% if not user.is_authenticated %}
-      <img src="{% static 'img/tall-trees-forest-mountains-covered-with-fog.jpg' %}" alt="wallpaper" class="wallpaper" />
-      <div class="wallpaper-shadow"></div>
+      <div class="wallpaper">
+        <img src="{% static 'img/tall-trees-forest-mountains-covered-with-fog.jpg' %}" alt="wallpaper" />
+        <div class="wallpaper-shadow"></div>
+      </div>
     {% endif %}
 
     {% if user.is_authenticated %}
       {% include 'global/partials/header.html' %}
     {% endif %}
 
-    <div class="container mt-5">
+    <div class="container pt-3">
+      <div class="mb-3">
+        {% block path %}
+
+        {% endblock %}
+      </div>
       {% block content %}
 
       {% endblock %}

@@ -1,15 +1,16 @@
 python -m venv venv
 venv\Scripts\activate
+
 python.exe -m pip install --upgrade pip
 pip install django mysqlclient python-dotenv pyotp qrcode pillow
-django-admin startproject project_name .
-
-python manage.py startapp app_name
-
-python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 
 pip freeze > requirements.txt
 pip install -r requirements.txt
+
+django-admin startproject project_name .
+python manage.py startapp app_name
+
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 
 python manage.py makemigrations
 python manage.py migrate
@@ -17,6 +18,7 @@ python manage.py showmigrations
 
 python manage.py createsuperuser
 
+python manage.py collectstatic
 python manage.py runserver
 
 https://docs.djangoproject.com/pt-br/5.1/ref/templates/builtins/#include
@@ -26,15 +28,3 @@ https://getbootstrap.com/ (Include via CDN)
 https://getbootstrap.com/docs/5.3/getting-started/introduction/#quick-start
 https://getbootstrap.com/docs/5.3/getting-started/download/#cdn-via-jsdelivr
 https://icons.getbootstrap.com/#install
-
-
-
-diary:
-day 1 - april 19, 2025
-- project started. first commit. dunno what it’s gonna be yet. i'll reuse some code from other projects of mine, so you might see some random stuff that was built quickly, but it's just already-done work.
-
-day 2 - april 21, 2025
-- started working on the authentication flow. only wrote code in views.py though.
-
-day 3 - april 30, 2025
-- profile page. mfa flow done.

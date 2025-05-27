@@ -7,4 +7,6 @@ urlpatterns = [
     path("login/", views.login_action, name="login"),
     path("mfa/", views.mfa, name="mfa"),
     path("profile/", views.profile, name="profile"),
+    path("edit/", views.edit_action, name="edit"),
+    path("change_password/", views.change_password, name="change_password"),
 ]

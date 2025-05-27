@@ -3,6 +3,16 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 
+class CustomUser(AbstractUser):
+    email = models.EmailField(unique=True, null=False, blank=False)
+
+    mfa_secret = models.CharField(max_length=100, blank=True, null=True)
+    mfa_enabled = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.get_full_name() or self.username
+
+
 class PasswordResetToken(models.Model):
     class Meta:
         db_table = "pswd_reset"
@@ -15,13 +25,3 @@ class PasswordResetToken(models.Model):
         from django.utils.timezone import now
 
         return (now() - self.created_at).total_seconds() < 3600  # Expira em 1 hora
-
-
-class CustomUser(AbstractUser):
-    email = models.EmailField(unique=True, null=False, blank=False)
-
-    mfa_secret = models.CharField(max_length=100, blank=True, null=True)
-    mfa_enabled = models.BooleanField(default=False)
-
-    def __str__(self):
-        return self.get_full_name() or self.username
