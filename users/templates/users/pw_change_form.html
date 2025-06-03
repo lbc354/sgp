@@ -1,4 +1,6 @@
 {% extends 'global/base.html' %}
+{% comment %} form on profile page to change password {% endcomment %}
+{% load static %}
 
 {% block title %}
   Alterar Senha
@@ -42,11 +44,14 @@
         <div class="col-12 d-flex align-items-center justify-content-between">
           <div></div>
           <div>
-            <a class="btn btn-secondary" href="{{ return_page_action }}" role="button">Voltar</a>
-            <button type="submit" class="btn btn-primary">Enviar</button>
+            <a class="btn btn-secondary" href="{{ return_page_action }}" role="button">Cancelar</a>
+            <button type="submit" class="btn btn-primary">Confirmar</button>
           </div>
         </div>
       </form>
     </div>
   </div>
+
+  <script src="{% static 'js/check_changes_in_form.js' %}"></script>
+
 {% endblock %}

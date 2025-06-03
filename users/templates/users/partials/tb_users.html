@@ -1,0 +1,74 @@
+{% load static %}
+<div class="draggable-table table-responsive">
+  <table class="table table-striped table-bordered table-hover" id="dataTable">
+    <thead class="thead-dark">
+      <tr>
+        <th class="tb-action" scope="col">Ações</th>
+        <th scope="col">Nome</th>
+        <th scope="col">E-mail</th>
+        {% if not inactive %}
+          <th scope="col">MFA Ativo</th>
+        {% endif %}
+        <th scope="col">Último login</th>
+        <th scope="col">Data cadastro</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for o in page_obj %}
+        <tr>
+          <td class="tb-action">
+            <div class="dropdown">
+              <button class="btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-three-dots-vertical"></i></button>
+              <ul class="dropdown-menu">
+                {% if not inactive %}
+                  <li>
+                    <a class="dropdown-item" href="{% url 'edit_id' o.user.pk %}">Editar</a>
+                  </li>
+                  <li>
+                    <a class="dropdown-item" href="{% url 'deactivate_user' o.user.pk %}">Desativar</a>
+                    {% comment %} <button type="button" class="dropdown-item text-primary" data-bs-toggle="modal" data-bs-target="#modalDesativar" data-url="{% url 'deactivate_user' o.user.pk %}">Desativar Usuário</button> {% endcomment %}
+                  </li>
+                  {% comment %} <li>
+                    <button type="button" class="dropdown-item text-info" data-bs-toggle="modal" data-bs-target="#modalDesabilitar" data-url="{% url 'disable_mfa' o.user.pk %}">Desabilitar MFA</button>
+                    </li>
+                    <li>
+                      <button type="button" class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#modalResetar" data-url="{% url 'resetar_senha_de_usuario' o.user.pk %}">Resetar Senha</button>
+                      </li> {% endcomment %}
+                      {% else %}
+                      <li>
+                    <a class="dropdown-item" href="{% url 'activate_user' o.user.pk %}">Ativar</a>
+                    {% comment %} <button type="button" class="dropdown-item text-primary" data-bs-toggle="modal" data-bs-target="#modalAtivar" data-url="{% url 'activate_user' o.user.pk %}">Ativar Usuário</button> {% endcomment %}
+                  </li>
+                {% endif %}
+              </ul>
+            </div>
+          </td>
+
+          <td title="{{ o.user|default_if_none:'' }}">{{ o.user|default_if_none:'' }}</td>
+
+          <td title="{{ o.email|default_if_none:'' }}">{{ o.email|default_if_none:'' }}</td>
+
+          {% if not inactive %}
+            <td title="{{ o.mfa_enabled|default_if_none:'' }}">{{ o.mfa_enabled|default_if_none:'' }}</td>
+          {% endif %}
+
+            <td title="{{ o.user.last_login|default_if_none:'' }}">{{ o.last_login|default_if_none:'' }}</td>
+
+            <td title="{{ o.user.date_joined|default_if_none:'' }}">{{ o.date_joined|default_if_none:'' }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="50">Nenhum usuário encontrado</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="d-flex align-items-center justify-content-between mt-3">
+  <div></div>
+  {% include 'global/partials/pagination.html' %}
+</div>
+
+<script src="{% static 'js/draggable_table.js' %}"></script>

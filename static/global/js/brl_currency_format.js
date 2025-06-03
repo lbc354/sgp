@@ -1,4 +1,4 @@
-// sem R$
+// without R$
 // function formatToReais(value) {
 //     return new Intl.NumberFormat('pt-BR', {
 //         minimumFractionDigits: 2,
@@ -6,7 +6,7 @@
 //     }).format(value);
 // }
 
-// com R$
+// with R$
 function formatToBRL(value) {
     return new Intl.NumberFormat('pt-BR', {
         style: 'currency',
@@ -15,7 +15,7 @@ function formatToBRL(value) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.valor-real').forEach(function (el) {
+    document.querySelectorAll('.currency-value').forEach(function (el) {
         const raw = el.dataset.valor;
         if (raw) {
             const num = parseFloat(raw);

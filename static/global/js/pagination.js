@@ -3,14 +3,14 @@ document.addEventListener("DOMContentLoaded", function () {
         link.addEventListener("click", function (event) {
             event.preventDefault();
 
-            // Obtem a URL atual e os parâmetros existentes
+            // gets the current url and the existing parameters
             const url = new URL(window.location.href);
             const params = new URLSearchParams(url.search);
 
-            // Atualiza ou adiciona o parâmetro 'page'
+            // updates or adds the 'page' parameter
             params.set("page", this.getAttribute("href").split("=")[1]);
 
-            // Atualiza a URL no navegador sem recarregar a página
+            // updates url in browser without reloading page
             window.location.href = `${url.pathname}?${params.toString()}`;
         });
     });

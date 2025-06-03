@@ -1,0 +1,8 @@
+{% load static %}
+
+<form class="d-flex gap-2" id="searchForm" method="GET">
+  <input class="form-control" type="text" name="q" placeholder="Pesquisar..." value="{{ query }}" />
+  <button class="btn btn-light border" type="submit"><i class="bi bi-search"></i></button>
+</form>
+
+<script src="{% static 'js/search_table.js' %}"></script>

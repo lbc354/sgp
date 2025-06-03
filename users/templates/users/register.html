@@ -1,0 +1,55 @@
+{% extends 'global/base.html' %}
+{% load static %}
+
+{% block title %}
+  Cadastrar
+{% endblock %}
+
+{% block path %}
+  <span><a href="{% url 'home' %}" class="link-secondary link-underline-opacity-25">Início</a></span>
+  <span>&gt;</span>
+  <span><a href="{% url 'active_users' %}" class="link-secondary link-underline-opacity-25">Usuários</a></span>
+  <span>&gt;</span>
+  <span class="text-secondary">Cadastro</span>
+{% endblock %}
+
+{% block content %}
+  <h2 class="my-4">Cadastrar</h2>
+
+  <div class="card p-3 bg-light">
+    <form class="row g-3" method="POST">
+      {% csrf_token %}
+
+      {% for field in form %}
+        <div class="col-sm-4">
+          <label class="form-label mt-1" for="{{ field.id_for_label }}">{{ field.label_tag }}</label>
+
+          {{ field }}
+
+          {% comment %} {% if field.help_text %}
+            <small class="text-muted">{{ field.help_text }}</small>
+          {% endif %} {% endcomment %}
+
+          {% if field.errors %}
+            <div class="text-danger">
+              {% for error in field.errors %}
+                <small>{{ error }}</small>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+
+      <div class="col-12 d-flex align-items-center justify-content-between">
+        <div></div>
+        <div>
+          <a class="btn btn-secondary" href="{{ return_page_action }}" role="button">Cancelar</a>
+          <button type="submit" class="btn btn-primary">Confirmar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <script src="{% static 'js/check_changes_in_form.js' %}"></script>
+
+{% endblock %}

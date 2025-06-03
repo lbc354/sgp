@@ -8,31 +8,31 @@
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Gerenciamento</a>
           <ul class="dropdown-menu">
             <li>
-              <a class="dropdown-item" href="#">Ver Usuários</a>
+              <a class="dropdown-item" href="{% url 'active_users' %}">Ver Usuários</a>
             </li>
             <li>
               <hr class="dropdown-divider" />
             </li>
             <li>
-              <a class="dropdown-item" href="#">Adicionar Usuário</a>
-            </li>
-          </ul>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Conta</a>
-          <ul class="dropdown-menu">
-            <li>
-              <a class="dropdown-item" href="{% url 'profile' %}">Perfil</a>
-            </li>
-            <li>
-              <hr class="dropdown-divider" />
-            </li>
-            <li>
-              <a class="dropdown-item text-danger" href="{% url 'logout' %}">Sair</a>
+              <a class="dropdown-item" href="{% url 'register' %}">Adicionar Usuário</a>
             </li>
           </ul>
         </li>
       </ul>
+      <div class="dropdown">
+        <a class="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">{{ request.user.username }}</a>
+        <ul class="dropdown-menu dropdown-menu-lg-end">
+          <li>
+            <a class="dropdown-item" href="{% url 'profile' %}">Perfil</a>
+          </li>
+          <li>
+            <hr class="dropdown-divider" />
+          </li>
+          <li>
+            <a class="dropdown-item text-danger" href="{% url 'logout' %}">Sair</a>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </nav>

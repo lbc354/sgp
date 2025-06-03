@@ -10,9 +10,10 @@
       <h1 class="card-title mb-3">MFA</h1>
       <form class="row g-3" action="{{ form_mfa_action }}" method="POST">
         {% csrf_token %}
-        <input type="hidden" name="user_id" value="{{ user_id }}" />
+        <input type="" name="user_id" value="{{ user_id }}" />
+        <input type="" name="next_url" value="{{ next_url }}" />
         <input type="number" class="form-control" id="otp_code" name="otp_code" placeholder="Código" required />
-        <button type="submit" class="btn btn-primary col-md-12">Enviar</button>
+        <button type="submit" class="btn btn-primary col-md-12">Confirmar</button>
       </form>
     </div>
   </div>

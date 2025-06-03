@@ -5,11 +5,11 @@ document.addEventListener("DOMContentLoaded", function () {
         searchForm.addEventListener("submit", function (event) {
             event.preventDefault();
 
-            // Obtém a URL atual e os parâmetros existentes
+            // gets the current url and the existing parameters
             const url = new URL(window.location.href);
             const params = new URLSearchParams(url.search);
 
-            // Adiciona o valor do campo de pesquisa sem apagar os parâmetros existentes
+            // adds the search field value without deleting existing parameters
             const searchQuery = searchForm.querySelector("input[name='q']").value;
             if (searchQuery) {
                 params.set("q", searchQuery);
@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 params.delete("q");
             }
 
-            // Atualiza a URL no navegador
+            // updates url in browser
             window.location.href = `${url.pathname}?${params.toString()}`;
         });
     }
