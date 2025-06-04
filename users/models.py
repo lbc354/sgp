@@ -9,6 +9,9 @@ class CustomUser(AbstractUser):
     mfa_secret = models.CharField(max_length=100, blank=True, null=True)
     mfa_enabled = models.BooleanField(default=False)
 
+    # created_at = models.DateTimeField(auto_now_add=True)  # similar to date_joined
+    updated_at = models.DateTimeField(auto_now=True)
+
     def __str__(self):
         return self.get_full_name() or self.username
 

@@ -38,3 +38,11 @@ body {
     left: 0;
     background-color: rgba(0, 0, 0, 0.5);
 }
+
+th {
+    min-width: 200px;
+}
+
+.tb-action {
+    min-width: 1px;
+}

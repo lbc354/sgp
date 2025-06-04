@@ -1,34 +1,49 @@
 from django.conf import settings
 from django.contrib import messages
 from django.utils import timezone
+from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
+from django.db import transaction, IntegrityError
 from django.contrib.auth import login, logout, get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib.sites.shortcuts import get_current_site
 from django.shortcuts import  redirect, render, resolve_url
 from django.urls import reverse
 from utils.pagination import make_pagination
+from users.models import PasswordResetToken
 from users.forms import (
     CustomAuthenticationForm,
     CustomUserCreationForm,
     CustomUserChangeForm,
     CustomPasswordChangeForm,
 )
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import smtplib
 import pyotp
 import qrcode
 import io
 import base64
+import logging
 
 
+logger = logging.getLogger(__name__)
+signer = TimestampSigner()
+
+
+# home page
 @login_required
 def home(request):
     return render(request, "global/home.html")
 
 
+# log out user
 def logout_action(request):
     logout(request)
-    messages.info(request, "Usuário saiu")
+    messages.success(request, "Usuário saiu")
     return redirect("login")
 
 
+# login page and login action
 def login_action(request):
     form_login_action = reverse("login")
     form_mfa_action = reverse("mfa")
@@ -47,7 +62,7 @@ def login_action(request):
 
             # if user is NOT active, don't allow to log in
             if not user.is_active:
-                messages.danger(request, "Usuário desativado")
+                messages.warning(request, "Usuário desativado")
                 return redirect("login")
 
             # if user has no mfa enabled and no mfa secret (e.g., it's their first login), generate a secret key for them
@@ -76,7 +91,7 @@ def login_action(request):
 
             # redirect after login
             return (
-                redirect("change_password")
+                redirect("reset_password")
                 if verify_default_password(request)
                 else redirect(next_url)
             )
@@ -131,6 +146,7 @@ def verify_mfa_otp(user, otp):
     return False
 
 
+# activate on profile page or verify during login
 def mfa(request):
     form_mfa_action = reverse("mfa")
 
@@ -164,7 +180,7 @@ def mfa(request):
             messages.success(request, "Usuário entrou")
 
             return (
-                redirect("change_password")
+                redirect("reset_password")
                 if verify_default_password(request)
                 else redirect(next_url)
             )
@@ -192,6 +208,7 @@ def mfa(request):
     return redirect("login")
 
 
+# profile page
 @login_required
 def profile(request):
     user = request.user
@@ -229,6 +246,7 @@ def profile(request):
     return render(request, "users/profile.html", {"qrcode": qr_code_data_uri})
 
 
+# edit page and edit action
 @login_required
 def edit(request, user_id=None):
     if user_id:
@@ -250,9 +268,18 @@ def edit(request, user_id=None):
     if request.method == "POST":
         form = CustomUserChangeForm(request.POST, instance=user, request=request)
         if form.is_valid():
-            form.save()
-            messages.success(request, "Usuário editado")
-            return redirect("active_users") if user_id else redirect("profile")
+            try:
+                with transaction.atomic():
+                    form.save()
+                    messages.success(request, "Usuário editado")
+                return redirect("active_users") if user_id else redirect("profile")
+            except IntegrityError as ie:
+                messages.error(request, "Erro transacional, tente novamente")
+                logger.error("Erro transacional: ", str(ie))
+            except Exception as e:
+                messages.error(request, "Ocorreu um erro, tente novamente")
+                logger.error("Erro genérico: ", str(e))
+                
     else:
         form = CustomUserChangeForm(instance=user, request=request)
 
@@ -267,6 +294,7 @@ def edit(request, user_id=None):
     )
 
 
+# register page and register action
 @login_required
 def register(request):
     return_page_action = reverse("active_users")
@@ -274,12 +302,21 @@ def register(request):
         form = CustomUserCreationForm(request.POST)
 
         if form.is_valid():
-            # user = form.save(commit=False)
-            # user.save()
-            # form.save_m2m()
-            form.save()
-            messages.success(request, "Usuário cadastrado")
-            return redirect("register")
+            try:
+                with transaction.atomic():
+                    # user = form.save(commit=False)
+                    # user.save()
+                    # form.save_m2m()
+                    form.save()
+                    messages.success(request, "Usuário cadastrado")
+                return redirect("register")
+            except IntegrityError as ie:
+                messages.error(request, "Erro transacional, tente novamente")
+                logger.error("Erro transacional: ", str(ie))
+            except Exception as e:
+                messages.error(request, "Ocorreu um erro, tente novamente")
+                logger.error("Erro genérico: ", str(e))
+
 
     else:
         form = CustomUserCreationForm()
@@ -291,6 +328,7 @@ def register(request):
     )
 
 
+# active users list
 @login_required
 def active_users(request):
     query = request.GET.get("q", "").strip().lower()
@@ -299,7 +337,7 @@ def active_users(request):
     users = (
         get_user_model()
         .objects.filter(is_superuser=False, is_staff=False, is_active=True)
-        .order_by("-date_joined")
+        .order_by("-updated_at", "-date_joined")
     )
 
     for user in users:
@@ -318,6 +356,11 @@ def active_users(request):
                 "date_joined": (
                     timezone.localtime(user.date_joined).strftime("%d/%m/%Y %H:%M")
                     if user.date_joined
+                    else "---------"
+                ),
+                "updated_at": (
+                    timezone.localtime(user.updated_at).strftime("%d/%m/%Y %H:%M")
+                    if user.updated_at
                     else "---------"
                 ),
             }
@@ -343,6 +386,7 @@ def active_users(request):
     )
 
 
+# deactivated users list
 @login_required
 def deactivated_users(request):
     query = request.GET.get("q", "").strip().lower()
@@ -351,7 +395,7 @@ def deactivated_users(request):
     users = (
         get_user_model()
         .objects.filter(is_superuser=False, is_staff=False, is_active=False)
-        .order_by("-date_joined")
+        .order_by("-updated_at", "-date_joined")
     )
 
     for user in users:
@@ -370,6 +414,11 @@ def deactivated_users(request):
                 "date_joined": (
                     timezone.localtime(user.date_joined).strftime("%d/%m/%Y %H:%M")
                     if user.date_joined
+                    else "---------"
+                ),
+                "updated_at": (
+                    timezone.localtime(user.updated_at).strftime("%d/%m/%Y %H:%M")
+                    if user.updated_at
                     else "---------"
                 ),
             }
@@ -396,6 +445,7 @@ def deactivated_users(request):
     )
 
 
+# activate deactivated user
 @login_required
 def activate_user(request, user_id):
     try:
@@ -414,6 +464,7 @@ def activate_user(request, user_id):
     return redirect("deactivated_users")
 
 
+# deactivate active user
 @login_required
 def deactivate_user(request, user_id):
     try:
@@ -432,24 +483,150 @@ def deactivate_user(request, user_id):
     return redirect("active_users")
 
 
-# change password via profile form
+# disable user's mfa
 @login_required
-def change_password(request):
+def disable_mfa(request, user_id=None):
+    try:
+        user = get_user_model().objects.get(id=user_id)
+    except get_user_model().DoesNotExist:
+        messages.error(request, "Usuário não encontrado")
+        return redirect("active_users")
+
+    if user.mfa_enabled:
+        user.mfa_enabled = False
+        user.save()
+        messages.success(request, "MFA desabilitado")
+    else:
+        messages.info(request, "MFA já está desabilitado")
+
+    return redirect("active_users")
+
+
+@login_required
+def reset_user_password(request, user_id=None):
+    try:
+        user = get_user_model().objects.get(id=user_id)
+    except get_user_model().DoesNotExist:
+        messages.error(request, "Usuário não encontrado")
+        return redirect("active_users")
+
+    user.set_password(settings.DEFAULT_USER_PASSWORD)
+    user.save()
+    messages.success(request, "Senha redefinida")
+
+    return redirect("active_users")
+
+
+# reset password via form
+@login_required
+def reset_password(request):
     return_page_action = reverse("edit")
     if request.method == "POST":
         form = CustomPasswordChangeForm(user=request.user, data=request.POST)
         if form.is_valid():
-            user = form.save()
-            update_session_auth_hash(
-                request, user
-            )  # keeps user logged in after changes
-            messages.success(request, "Senha atualizada")
-            return redirect("profile")
+            try:
+                with transaction.atomic():
+                    user = form.save()
+                    update_session_auth_hash(
+                        request, user
+                    )  # keeps user logged in after changes
+                    messages.success(request, "Senha atualizada")
+                return redirect("profile")
+            except IntegrityError as ie:
+                messages.error(request, "Erro transacional, tente novamente")
+                logger.error("Erro transacional: ", str(ie))
+            except Exception as e:
+                messages.error(request, "Ocorreu um erro, tente novamente")
+                logger.error("Erro genérico: ", str(e))
     else:
         form = CustomPasswordChangeForm(user=request.user)
 
     return render(
         request,
-        "users/pw_change_form.html",
+        "users/reset_password.html",
         {"form": form, "return_page_action": return_page_action},
     )
+
+
+# reset password via email
+def password_reset(request, token):
+    try:
+        user_id = signer.unsign(token, max_age=3600)  # token expires in 1 hour
+        try:
+            user = get_user_model().objects.get(id=user_id)
+        except get_user_model().DoesNotExist:
+            messages.error(request, "Usuário não encontrado")
+            # test
+            return redirect("login")
+    except (BadSignature, SignatureExpired):
+        messages.error(request, "Token inválido ou expirado")
+        # test
+        return redirect("login")
+
+    if request.method == "POST":
+        new_password = request.POST.get("password")
+        user.set_password(new_password)
+        user.save()
+
+        # remove token from database
+        PasswordResetToken.objects.filter(token=token).delete()
+
+        messages.success(request, "Senha redefinida")
+        return redirect("login")
+
+    return render(request, "users/password_reset.html", {"token": token})
+
+
+# request password reset via email
+def request_password_reset(request):
+    if request.method == "POST":
+        try:
+            email = request.POST.get("email")
+            user = get_user_model().objects.get(email=email)
+        except get_user_model().DoesNotExist:
+            messages.error(request, "E-mail não encontrado")
+            return redirect("request_password_reset")
+
+        # create unique token for password reset
+        token = signer.sign(user.id)
+        PasswordResetToken.objects.create(user=user, token=token)
+
+        # builds password reset URL
+        current_site = get_current_site(request)
+        reset_url = (
+            f"http://{current_site.domain}{reverse('password_reset', args=[token])}"
+        )
+
+        corpo_email = f"""
+        <html>
+            <body>
+                <p>Olá, {user}!</p>
+                <p>Você solicitou a redefinição de senha. Para continuar, clique no link abaixo:</p>
+                <p><a href="{reset_url}" target="_blank">Redefinir Senha</a></p>
+                <strong>Se não foi você, ignore este e-mail.</strong>
+            </body>
+        </html>
+        """
+
+        remetente = "svc.sgp@dnit.gov.br"
+        destinatario = email
+        assunto = "Redefinição de Senha"
+
+        msg = MIMEMultipart()
+        msg["From"] = remetente
+        msg["To"] = destinatario
+        msg["Subject"] = assunto
+        msg.attach(MIMEText(corpo_email, "html"))
+
+        try:
+            server = smtplib.SMTP("10.100.10.45")
+            server.sendmail(remetente, destinatario, msg.as_string())
+            server.quit()
+            messages.success(request, "E-mail de redefinição enviado")
+        except Exception as e:
+            print(f"REQUEST_PASSWORD_reset | Erro ao enviar email para {destinatario}: {str(e)}")
+            messages.error(request, f"Erro ao enviar email para {destinatario}")
+
+        return redirect("request_password_reset")
+
+    return render(request, "users/request_password_reset.html")

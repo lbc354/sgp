@@ -11,18 +11,17 @@ from django.conf import settings
 class CustomAuthenticationForm(AuthenticationForm):
     username = forms.CharField(
         widget=forms.TextInput(
-            attrs={"class": "form-control", "placeholder": "Username"}
+            attrs={"class": "form-control", "placeholder": "Usuário"}
         ),
     )
 
     password = forms.CharField(
         widget=forms.PasswordInput(
-            attrs={"class": "form-control", "placeholder": "Password"}
+            attrs={"class": "form-control", "placeholder": "Senha"}
         ),
     )
 
 
-# class CustomUserCreationForm(UserCreationForm):
 class CustomUserCreationForm(forms.ModelForm):
     class Meta:
         model = CustomUser
@@ -47,6 +46,16 @@ class CustomUserCreationForm(forms.ModelForm):
                 field.widget.attrs["class"] += " form-control"
             else:
                 field.widget.attrs["class"] = "form-control"
+    
+    def clean(self):
+        cleaned_data = super().clean()  # calls the parent class's clean method
+
+        # clean whitespace from all fields in the form
+        for campo, valor in cleaned_data.items():
+            if isinstance(valor, str):  # check if the value is a string
+                cleaned_data[campo] = valor.strip()  # remove leading and trailing spaces
+
+        return cleaned_data
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -68,7 +77,8 @@ class CustomUserChangeForm(UserChangeForm):
             "groups",
         )
         labels = {
-            # "username": "Username",
+            "first_name": "Nome",
+            "last_name": "Sobrenome",
         }
 
     def __init__(self, *args, request=None, **kwargs):
@@ -89,6 +99,16 @@ class CustomUserChangeForm(UserChangeForm):
             # if doesn't have required permission, hide inputs
             # if not has_permissions:
             #     self.fields.pop("groups", None)
+    
+    def clean(self):
+        cleaned_data = super().clean()  # calls the parent class's clean method
+
+        # clean whitespace from all fields in the form
+        for campo, valor in cleaned_data.items():
+            if isinstance(valor, str):  # check if the value is a string
+                cleaned_data[campo] = valor.strip()  # remove leading and trailing spaces
+
+        return cleaned_data
 
 
 class CustomPasswordChangeForm(PasswordChangeForm):

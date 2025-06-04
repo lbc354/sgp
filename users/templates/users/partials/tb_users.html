@@ -1,6 +1,6 @@
 {% load static %}
 <div class="draggable-table table-responsive">
-  <table class="table table-striped table-bordered table-hover" id="dataTable">
+  <table class="table table-striped table-bordered table-hover">
     <thead class="thead-dark">
       <tr>
         <th class="tb-action" scope="col">Ações</th>
@@ -11,13 +11,14 @@
         {% endif %}
         <th scope="col">Último login</th>
         <th scope="col">Data cadastro</th>
+        <th scope="col">Atualizado em</th>
       </tr>
     </thead>
 
     <tbody>
       {% for o in page_obj %}
         <tr>
-          <td class="tb-action">
+          <td>
             <div class="dropdown">
               <button class="btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-three-dots-vertical"></i></button>
               <ul class="dropdown-menu">
@@ -27,16 +28,18 @@
                   </li>
                   <li>
                     <a class="dropdown-item" href="{% url 'deactivate_user' o.user.pk %}">Desativar</a>
-                    {% comment %} <button type="button" class="dropdown-item text-primary" data-bs-toggle="modal" data-bs-target="#modalDesativar" data-url="{% url 'deactivate_user' o.user.pk %}">Desativar Usuário</button> {% endcomment %}
+                    {% comment %} <button type="button" class="dropdown-item text-primary" data-bs-toggle="modal" data-bs-target="#modalDeactivate" data-url="{% url 'deactivate_user' o.user.pk %}">Desativar</button> {% endcomment %}
                   </li>
-                  {% comment %} <li>
-                    <button type="button" class="dropdown-item text-info" data-bs-toggle="modal" data-bs-target="#modalDesabilitar" data-url="{% url 'disable_mfa' o.user.pk %}">Desabilitar MFA</button>
-                    </li>
-                    <li>
-                      <button type="button" class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#modalResetar" data-url="{% url 'resetar_senha_de_usuario' o.user.pk %}">Resetar Senha</button>
-                      </li> {% endcomment %}
-                      {% else %}
-                      <li>
+                  <li>
+                    <a class="dropdown-item" href="{% url 'disable_mfa' o.user.pk %}">Desabilitar</a>
+                    {% comment %} <button type="button" class="dropdown-item text-info" data-bs-toggle="modal" data-bs-target="#modalDisable" data-url="{% url 'disable_mfa' o.user.pk %}">Desabilitar MFA</button> {% endcomment %}
+                  </li>
+                  <li>
+                    <a class="dropdown-item" href="{% url 'reset_user_password' o.user.pk %}">Redefinir</a>
+                    {% comment %} <button type="button" class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#modalReset" data-url="{% url 'reset_user_password' o.user.pk %}">Resetar Senha</button> {% endcomment %}
+                  </li>
+                {% else %}
+                  <li>
                     <a class="dropdown-item" href="{% url 'activate_user' o.user.pk %}">Ativar</a>
                     {% comment %} <button type="button" class="dropdown-item text-primary" data-bs-toggle="modal" data-bs-target="#modalAtivar" data-url="{% url 'activate_user' o.user.pk %}">Ativar Usuário</button> {% endcomment %}
                   </li>
@@ -56,6 +59,8 @@
             <td title="{{ o.user.last_login|default_if_none:'' }}">{{ o.last_login|default_if_none:'' }}</td>
 
             <td title="{{ o.user.date_joined|default_if_none:'' }}">{{ o.date_joined|default_if_none:'' }}</td>
+
+            <td title="{{ o.user.updated_at|default_if_none:'' }}">{{ o.updated_at|default_if_none:'' }}</td>
         </tr>
       {% empty %}
         <tr>
