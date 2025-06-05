@@ -3,10 +3,12 @@
   <table class="table table-striped table-bordered table-hover">
     <thead class="thead-dark">
       <tr>
-        <th class="tb-action" scope="col">Ações</th>
+        {% if can_manage_users %}
+          <th class="tb-action" scope="col">Ações</th>
+        {% endif %}
         <th scope="col">Nome</th>
         <th scope="col">E-mail</th>
-        {% if not inactive %}
+        {% if not deactivated %}
           <th scope="col">MFA Ativo</th>
         {% endif %}
         <th scope="col">Último login</th>
@@ -18,35 +20,33 @@
     <tbody>
       {% for o in page_obj %}
         <tr>
-          <td>
-            <div class="dropdown">
-              <button class="btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-three-dots-vertical"></i></button>
-              <ul class="dropdown-menu">
-                {% if not inactive %}
-                  <li>
-                    <a class="dropdown-item" href="{% url 'edit_id' o.user.pk %}">Editar</a>
-                  </li>
-                  <li>
-                    <a class="dropdown-item" href="{% url 'deactivate_user' o.user.pk %}">Desativar</a>
-                    {% comment %} <button type="button" class="dropdown-item text-primary" data-bs-toggle="modal" data-bs-target="#modalDeactivate" data-url="{% url 'deactivate_user' o.user.pk %}">Desativar</button> {% endcomment %}
-                  </li>
-                  <li>
-                    <a class="dropdown-item" href="{% url 'disable_mfa' o.user.pk %}">Desabilitar</a>
-                    {% comment %} <button type="button" class="dropdown-item text-info" data-bs-toggle="modal" data-bs-target="#modalDisable" data-url="{% url 'disable_mfa' o.user.pk %}">Desabilitar MFA</button> {% endcomment %}
-                  </li>
-                  <li>
-                    <a class="dropdown-item" href="{% url 'reset_user_password' o.user.pk %}">Redefinir</a>
-                    {% comment %} <button type="button" class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#modalReset" data-url="{% url 'reset_user_password' o.user.pk %}">Resetar Senha</button> {% endcomment %}
-                  </li>
-                {% else %}
-                  <li>
-                    <a class="dropdown-item" href="{% url 'activate_user' o.user.pk %}">Ativar</a>
-                    {% comment %} <button type="button" class="dropdown-item text-primary" data-bs-toggle="modal" data-bs-target="#modalAtivar" data-url="{% url 'activate_user' o.user.pk %}">Ativar Usuário</button> {% endcomment %}
-                  </li>
-                {% endif %}
-              </ul>
-            </div>
-          </td>
+          {% if can_manage_users %}
+            <td>
+              <div class="dropdown">
+                <button class="btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-three-dots-vertical"></i></button>
+                <ul class="dropdown-menu">
+                  {% if not deactivated %}
+                    <li>
+                      <a class="dropdown-item" href="{% url 'edit_id' o.user.pk %}">Editar</a>
+                    </li>
+                    <li>
+                      <button type="button" class="dropdown-item text-info" data-bs-toggle="modal" data-bs-target="#modalDisable" data-url="{% url 'disable_mfa' o.user.pk %}">Desabilitar MFA</button>
+                    </li>
+                    <li>
+                      <button type="button" class="dropdown-item text-warning" data-bs-toggle="modal" data-bs-target="#modalReset" data-url="{% url 'reset_user_password' o.user.pk %}">Redefinir Senha</button>
+                    </li>
+                    <li>
+                      <button type="button" class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#modalDeactivate" data-url="{% url 'deactivate_user' o.user.pk %}">Desativar</button>
+                    </li>
+                  {% else %}
+                    <li>
+                      <button type="button" class="dropdown-item text-primary" data-bs-toggle="modal" data-bs-target="#modalActivate" data-url="{% url 'activate_user' o.user.pk %}">Ativar</button>
+                    </li>
+                  {% endif %}
+                </ul>
+              </div>
+            </td>
+          {% endif %}
 
           <td title="{{ o.user|default_if_none:'' }}">{{ o.user|default_if_none:'' }}</td>
 
@@ -75,5 +75,127 @@
   <div></div>
   {% include 'global/partials/pagination.html' %}
 </div>
+
+
+
+
+
+{% comment %}modal to disable{% endcomment %}
+<div class="modal fade" id="modalDisable" tabindex="-1" aria-labelledby="modalDisableLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="modalDisableLabel">Confirmação</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">Desabilitar MFA deste usuário?</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+        <form id="disableForm" method="POST">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-info">Desabilitar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% comment %}modal to reset{% endcomment %}
+<div class="modal fade" id="modalReset" tabindex="-1" aria-labelledby="modalResetLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="modalResetLabel">Confirmação</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">Redefinir senha deste usuário?</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+        <form id="resetForm" method="POST">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-warning">Redefinir</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% comment %}modal to deactivate{% endcomment %}
+<div class="modal fade" id="modalDeactivate" tabindex="-1" aria-labelledby="modalDeactivateLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="modalDeactivateLabel">Confirmação</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">Desativar este usuário?</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+        <form id="deactivateForm" method="POST">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger">Desativar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% comment %}modal to activate{% endcomment %}
+<div class="modal fade" id="modalActivate" tabindex="-1" aria-labelledby="modalActivateLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="modalActivateLabel">Confirmação</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">Ativar este usuário?</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+        <form id="activateForm" method="POST">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary">Ativar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // modal to disable
+    const modalDisable = document.getElementById('modalDisable')
+    modalDisable.addEventListener('show.bs.modal', function (event) {
+      const button = event.relatedTarget
+      const url = button.getAttribute('data-url')
+      const form = document.getElementById('disableForm')
+      form.action = url
+    })
+    // modal to reset
+    const modalReset = document.getElementById('modalReset')
+    modalReset.addEventListener('show.bs.modal', function (event) {
+      const button = event.relatedTarget
+      const url = button.getAttribute('data-url')
+      const form = document.getElementById('resetForm')
+      form.action = url
+    })
+    // modal to deactivate
+    const modalDeactivate = document.getElementById('modalDeactivate')
+    modalDeactivate.addEventListener('show.bs.modal', function (event) {
+      const button = event.relatedTarget
+      const url = button.getAttribute('data-url')
+      const form = document.getElementById('deactivateForm')
+      form.action = url
+    })
+    // modal to activate
+    const modalActivate = document.getElementById('modalActivate')
+    modalActivate.addEventListener('show.bs.modal', function (event) {
+      const button = event.relatedTarget
+      const url = button.getAttribute('data-url')
+      const form = document.getElementById('activateForm')
+      form.action = url
+    })
+  })
+</script>
 
 <script src="{% static 'js/draggable_table.js' %}"></script>

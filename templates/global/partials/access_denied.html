@@ -1,0 +1,13 @@
+{% extends 'global/base.html' %}
+
+{% block title %}
+  Acesso Negado
+{% endblock %}
+
+{% block content %}
+  <div class="card p-5 bg-danger-subtle">
+    <h1 class="text-danger-emphasis">Acesso Negado</h1>
+    <p class="text-danger-emphasis">Você não tem permissão para acessar este conteúdo</p>
+    <button class="btn btn-light col-1 mt-3" onclick="history.back()"><i class="bi bi-arrow-left"></i>Voltar</button>
+  </div>
+{% endblock %}

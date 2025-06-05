@@ -7,9 +7,9 @@ from django.views.static import serve
 BASE_URL = "app"
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
-    path('', lambda request: redirect(f'/{BASE_URL}/', permanent=True)),
-    path(f'{BASE_URL}/', include('users.urls')),
+    path(f"{BASE_URL}/admin/", admin.site.urls),
+    path("", lambda request: redirect(f"/{BASE_URL}/", permanent=True)),
+    path(f"{BASE_URL}/", include("users.urls")),
 ]
 
 if settings.DEBUG:
@@ -17,5 +17,7 @@ if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 else:
     urlpatterns += [
-        re_path(r"^app/static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}),
+        re_path(
+            r"^app/static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}
+        ),
     ]

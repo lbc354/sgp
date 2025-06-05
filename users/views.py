@@ -4,10 +4,11 @@ from django.utils import timezone
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 from django.db import transaction, IntegrityError
 from django.contrib.auth import login, logout, get_user_model, update_session_auth_hash
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.sites.shortcuts import get_current_site
 from django.shortcuts import redirect, render, resolve_url
 from django.urls import reverse
+from utils.decorators import group_required, deny_if_not_in_group, user_is_in_group
 from utils.pagination import make_pagination
 from users.models import PasswordResetToken
 from users.forms import (
@@ -36,10 +37,16 @@ def home(request):
     return render(request, "global/home.html")
 
 
+# access denied page
+@login_required
+def access_denied(request):
+    return render(request, "global/partials/access_denied.html")
+
+
 # log out user
 def logout_action(request):
     logout(request)
-    messages.success(request, "Usuário saiu")
+    messages.info(request, "Usuário saiu")
     return redirect("login")
 
 
@@ -84,7 +91,7 @@ def login_action(request):
 
             # log user in
             login(request, user)
-            messages.success(request, "Usuário entrou")
+            messages.info(request, "Usuário entrou")
 
             # redirect after login
             return (
@@ -176,7 +183,7 @@ def mfa(request):
 
             # user in mfa page authenticating
             login(request, user)
-            messages.success(request, "Usuário entrou")
+            messages.info(request, "Usuário entrou")
 
             return (
                 redirect("reset_password")
@@ -261,10 +268,11 @@ def edit(request, user_id=None):
     else:
         user = request.user
 
-    # if an user without permissions (we still have to check the permissions) is trying to access the edit page of an user other than himself, do not allow
-    if request.user and request.user.id != user.id and not request.user.is_superuser:
-        messages.error(request, "Sem permissões")
-        return redirect("profile")
+    # if an user without permissions is trying to access the edit page of an user other than himself, do not allow
+    if request.user and request.user.id != user.id:
+        is_denied = deny_if_not_in_group(request, "manage_users")
+        if is_denied:
+            return is_denied
 
     if request.method == "POST":
         form = CustomUserChangeForm(request.POST, instance=user, request=request)
@@ -298,6 +306,10 @@ def edit(request, user_id=None):
 
 # register page and register action
 @login_required
+# checking permission example
+# @permission_required("add_customuser", "access_denied")
+# checking group example
+@group_required("manage_users")
 def register(request):
     # example of how we can control paths in the front-end by the back-end
     return_page_action = reverse("active_users")
@@ -335,6 +347,9 @@ def register(request):
 # active users list
 @login_required
 def active_users(request):
+    # can_add_users = request.user.has_perm("users.add_customuser")
+    can_manage_users = user_is_in_group(request, "manage_users")
+
     # get query from url (.../?q=str)
     query = request.GET.get("q", "").strip().lower()
 
@@ -388,6 +403,8 @@ def active_users(request):
         {
             "page_obj": page_obj,
             "pagination_range": pagination_range,
+            "can_manage_users": can_manage_users,
+            # "can_add_user": can_add_user,
         },
     )
 
@@ -395,6 +412,9 @@ def active_users(request):
 # deactivated users list
 @login_required
 def deactivated_users(request):
+    # can_add_user = request.user.has_perm("users.add_customuser")
+    can_manage_users = user_is_in_group(request, "manage_users")
+
     # get query from url (.../?q=str)
     query = request.GET.get("q", "").strip().lower()
 
@@ -448,13 +468,16 @@ def deactivated_users(request):
         {
             "page_obj": page_obj,
             "pagination_range": pagination_range,
-            "inactive": "inactive",
+            "deactivated": "deactivated",
+            "can_manage_users":can_manage_users,
+            # "can_add_user": can_add_user,
         },
     )
 
 
 # activate deactivated user
 @login_required
+@group_required("manage_users")
 def activate_user(request, user_id):
     # try to get user
     try:
@@ -476,6 +499,7 @@ def activate_user(request, user_id):
 
 # deactivate active user
 @login_required
+@group_required("manage_users")
 def deactivate_user(request, user_id):
     # try to get user
     try:
@@ -497,6 +521,7 @@ def deactivate_user(request, user_id):
 
 # disable user's mfa
 @login_required
+@group_required("manage_users")
 def disable_mfa(request, user_id):
     # try to get user
     try:
@@ -518,6 +543,7 @@ def disable_mfa(request, user_id):
 
 # reset user's password (default password)
 @login_required
+@group_required("manage_users")
 def reset_user_password(request, user_id):
     # try to get user
     try:
