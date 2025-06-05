@@ -6,7 +6,7 @@ from django.db import transaction, IntegrityError
 from django.contrib.auth import login, logout, get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.sites.shortcuts import get_current_site
-from django.shortcuts import  redirect, render, resolve_url
+from django.shortcuts import redirect, render, resolve_url
 from django.urls import reverse
 from utils.pagination import make_pagination
 from users.models import PasswordResetToken
@@ -45,7 +45,6 @@ def logout_action(request):
 
 # login page and login action
 def login_action(request):
-    form_login_action = reverse("login")
     form_mfa_action = reverse("mfa")
     next_url = resolve_url(request.GET.get("next", reverse("home")))
     # if user is authenticated, redirect to home
@@ -83,8 +82,6 @@ def login_action(request):
                     },
                 )
 
-            print("chegou aqui")
-
             # log user in
             login(request, user)
             messages.success(request, "Usuário entrou")
@@ -102,7 +99,9 @@ def login_action(request):
             return render(
                 request,
                 "users/login.html",
-                {"form": form, "form_login_action": form_login_action},
+                {
+                    "form": form,
+                },
             )
 
     # if GET method
@@ -112,7 +111,9 @@ def login_action(request):
     return render(
         request,
         "users/login.html",
-        {"form": form, "form_login_action": form_login_action},
+        {
+            "form": form,
+        },
     )
 
 
@@ -148,8 +149,6 @@ def verify_mfa_otp(user, otp):
 
 # activate on profile page or verify during login
 def mfa(request):
-    form_mfa_action = reverse("mfa")
-
     # get the values ​​of the hidden inputs
     user_id = request.POST.get("user_id")
     next_url = request.POST.get("next_url")
@@ -199,7 +198,6 @@ def mfa(request):
                 "users/mfa.html",
                 {
                     "user_id": user_id,
-                    "form_mfa_action": form_mfa_action,
                     "next_url": next_url,
                 },
             )
@@ -249,16 +247,19 @@ def profile(request):
 # edit page and edit action
 @login_required
 def edit(request, user_id=None):
+    # example of how we can control paths in the front-end by the back-end
+    return_page_action = reverse("active_users") if user_id else reverse("profile")
+
+    # if there is id in url, try to get user
     if user_id:
         try:
             user = get_user_model().objects.get(id=user_id)
         except get_user_model().DoesNotExist:
             messages.error(request, "Usuário não encontrado")
             return redirect("active_users")
+    # if no id in url, the instance gonna be the authenticated user
     else:
         user = request.user
-
-    return_page_action = reverse("active_users") if user_id else reverse("profile")
 
     # if an user without permissions (we still have to check the permissions) is trying to access the edit page of an user other than himself, do not allow
     if request.user and request.user.id != user.id and not request.user.is_superuser:
@@ -269,6 +270,7 @@ def edit(request, user_id=None):
         form = CustomUserChangeForm(request.POST, instance=user, request=request)
         if form.is_valid():
             try:
+                # transactional context example
                 with transaction.atomic():
                     form.save()
                     messages.success(request, "Usuário editado")
@@ -279,7 +281,7 @@ def edit(request, user_id=None):
             except Exception as e:
                 messages.error(request, "Ocorreu um erro, tente novamente")
                 logger.error("Erro genérico: ", str(e))
-                
+
     else:
         form = CustomUserChangeForm(instance=user, request=request)
 
@@ -297,12 +299,15 @@ def edit(request, user_id=None):
 # register page and register action
 @login_required
 def register(request):
+    # example of how we can control paths in the front-end by the back-end
     return_page_action = reverse("active_users")
+
     if request.method == "POST":
         form = CustomUserCreationForm(request.POST)
 
         if form.is_valid():
             try:
+                # transactional context example
                 with transaction.atomic():
                     # user = form.save(commit=False)
                     # user.save()
@@ -317,7 +322,6 @@ def register(request):
                 messages.error(request, "Ocorreu um erro, tente novamente")
                 logger.error("Erro genérico: ", str(e))
 
-
     else:
         form = CustomUserCreationForm()
 
@@ -331,23 +335,24 @@ def register(request):
 # active users list
 @login_required
 def active_users(request):
+    # get query from url (.../?q=str)
     query = request.GET.get("q", "").strip().lower()
 
+    # list
     users_data = []
+    # queryset
     users = (
         get_user_model()
         .objects.filter(is_superuser=False, is_staff=False, is_active=True)
         .order_by("-updated_at", "-date_joined")
     )
 
+    # add each element in the queryset to the list
     for user in users:
-        # here is the pattern for returning date
-        # use timezone to put the time registered in the database in the correct time zone
+        # use timezone.localtime to put the time registered in the database in the correct time zone
         users_data.append(
             {
                 "user": user,
-                "email": user.email,
-                "mfa_enabled": "Sim" if user.mfa_enabled else "Não",
                 "last_login": (
                     timezone.localtime(user.last_login).strftime("%d/%m/%Y %H:%M")
                     if user.last_login
@@ -374,6 +379,7 @@ def active_users(request):
             if any(query in str(data[key]).lower() for key in data)
         ]
 
+    # pagination
     page_obj, pagination_range = make_pagination(request, users_data, settings.PER_PAGE)
 
     return render(
@@ -389,23 +395,24 @@ def active_users(request):
 # deactivated users list
 @login_required
 def deactivated_users(request):
+    # get query from url (.../?q=str)
     query = request.GET.get("q", "").strip().lower()
 
+    # list
     users_data = []
+    # queryset
     users = (
         get_user_model()
         .objects.filter(is_superuser=False, is_staff=False, is_active=False)
         .order_by("-updated_at", "-date_joined")
     )
 
+    # add each element in the queryset to the list
     for user in users:
-        # here is the pattern for returning date
-        # use timezone to put the time registered in the database in the correct time zone
+        # use timezone.localtime to put the time registered in the database in the correct time zone
         users_data.append(
             {
                 "user": user,
-                "email": user.email,
-                "mfa_enabled": "Sim" if user.mfa_enabled else "Não",
                 "last_login": (
                     timezone.localtime(user.last_login).strftime("%d/%m/%Y %H:%M")
                     if user.last_login
@@ -432,6 +439,7 @@ def deactivated_users(request):
             if any(query in str(data[key]).lower() for key in data)
         ]
 
+    # pagination
     page_obj, pagination_range = make_pagination(request, users_data, settings.PER_PAGE)
 
     return render(
@@ -448,12 +456,14 @@ def deactivated_users(request):
 # activate deactivated user
 @login_required
 def activate_user(request, user_id):
+    # try to get user
     try:
         user = get_user_model().objects.get(id=user_id)
     except get_user_model().DoesNotExist:
         messages.error(request, "Usuário não encontrado")
         return redirect("deactivated_users")
 
+    # activate user
     if not user.is_active:
         user.is_active = True
         user.save()
@@ -467,12 +477,14 @@ def activate_user(request, user_id):
 # deactivate active user
 @login_required
 def deactivate_user(request, user_id):
+    # try to get user
     try:
         user = get_user_model().objects.get(id=user_id)
     except get_user_model().DoesNotExist:
         messages.error(request, "Usuário não encontrado")
         return redirect("active_users")
 
+    # deactivate user
     if user.is_active:
         user.is_active = False
         user.save()
@@ -485,13 +497,15 @@ def deactivate_user(request, user_id):
 
 # disable user's mfa
 @login_required
-def disable_mfa(request, user_id=None):
+def disable_mfa(request, user_id):
+    # try to get user
     try:
         user = get_user_model().objects.get(id=user_id)
     except get_user_model().DoesNotExist:
         messages.error(request, "Usuário não encontrado")
         return redirect("active_users")
 
+    # disable mfa
     if user.mfa_enabled:
         user.mfa_enabled = False
         user.save()
@@ -502,14 +516,17 @@ def disable_mfa(request, user_id=None):
     return redirect("active_users")
 
 
+# reset user's password (default password)
 @login_required
-def reset_user_password(request, user_id=None):
+def reset_user_password(request, user_id):
+    # try to get user
     try:
         user = get_user_model().objects.get(id=user_id)
     except get_user_model().DoesNotExist:
         messages.error(request, "Usuário não encontrado")
         return redirect("active_users")
 
+    # reset password
     user.set_password(settings.DEFAULT_USER_PASSWORD)
     user.save()
     messages.success(request, "Senha redefinida")
@@ -517,19 +534,21 @@ def reset_user_password(request, user_id=None):
     return redirect("active_users")
 
 
-# reset password via form
+# reset own password via form
 @login_required
 def reset_password(request):
+    # example of how we can control paths in the front-end by the back-end
     return_page_action = reverse("edit")
+
     if request.method == "POST":
         form = CustomPasswordChangeForm(user=request.user, data=request.POST)
         if form.is_valid():
             try:
+                # transactional context example
                 with transaction.atomic():
                     user = form.save()
-                    update_session_auth_hash(
-                        request, user
-                    )  # keeps user logged in after changes
+                    # keeps user logged in after changes
+                    update_session_auth_hash(request, user)
                     messages.success(request, "Senha atualizada")
                 return redirect("profile")
             except IntegrityError as ie:
@@ -548,44 +567,16 @@ def reset_password(request):
     )
 
 
-# reset password via email
-def password_reset(request, token):
-    try:
-        user_id = signer.unsign(token, max_age=3600)  # token expires in 1 hour
-        try:
-            user = get_user_model().objects.get(id=user_id)
-        except get_user_model().DoesNotExist:
-            messages.error(request, "Usuário não encontrado")
-            # test
-            return redirect("login")
-    except (BadSignature, SignatureExpired):
-        messages.error(request, "Token inválido ou expirado")
-        # test
-        return redirect("login")
-
-    if request.method == "POST":
-        new_password = request.POST.get("password")
-        user.set_password(new_password)
-        user.save()
-
-        # remove token from database
-        PasswordResetToken.objects.filter(token=token).delete()
-
-        messages.success(request, "Senha redefinida")
-        return redirect("login")
-
-    return render(request, "users/password_reset.html", {"token": token})
-
-
-# request password reset via email
+# request own password reset via email
 def request_password_reset(request):
     if request.method == "POST":
+        # try to get user
         try:
             email = request.POST.get("email")
             user = get_user_model().objects.get(email=email)
         except get_user_model().DoesNotExist:
             messages.error(request, "E-mail não encontrado")
-            return redirect("request_password_reset")
+            return render(request, "users/request_password_reset.html")
 
         # create unique token for password reset
         token = signer.sign(user.id)
@@ -597,7 +588,7 @@ def request_password_reset(request):
             f"http://{current_site.domain}{reverse('password_reset', args=[token])}"
         )
 
-        corpo_email = f"""
+        email_message = f"""
         <html>
             <body>
                 <p>Olá, {user}!</p>
@@ -608,25 +599,68 @@ def request_password_reset(request):
         </html>
         """
 
-        remetente = "svc.sgp@dnit.gov.br"
-        destinatario = email
-        assunto = "Redefinição de Senha"
+        sender = "svc.sgp@dnit.gov.br"
+        recipient = email
+        subject = "Redefinição de Senha"
 
         msg = MIMEMultipart()
-        msg["From"] = remetente
-        msg["To"] = destinatario
-        msg["Subject"] = assunto
-        msg.attach(MIMEText(corpo_email, "html"))
+        msg["From"] = sender
+        msg["To"] = recipient
+        msg["Subject"] = subject
+        msg.attach(MIMEText(email_message, "html"))
 
         try:
             server = smtplib.SMTP("10.100.10.45")
-            server.sendmail(remetente, destinatario, msg.as_string())
+            server.sendmail(sender, recipient, msg.as_string())
             server.quit()
             messages.success(request, "E-mail de redefinição enviado")
         except Exception as e:
-            print(f"REQUEST_PASSWORD_reset | Erro ao enviar email para {destinatario}: {str(e)}")
-            messages.error(request, f"Erro ao enviar email para {destinatario}")
+            logger.error(
+                f"REQUEST_PASSWORD_RESET | Erro ao enviar email para {recipient}: {str(e)}"
+            )
+            messages.error(request, f"Erro ao enviar email para {recipient}")
 
         return redirect("request_password_reset")
 
     return render(request, "users/request_password_reset.html")
+
+
+# reset own password via email
+def password_reset(request, token):
+    try:
+        # check and decode token
+        user_id = signer.unsign(
+            token, max_age=3600
+        )  # token expires in 1 hour (3600 seconds)
+
+        # try to get user
+        try:
+            user = get_user_model().objects.get(id=user_id)
+        except get_user_model().DoesNotExist:
+            messages.error(request, "Usuário não encontrado, tente novamente")
+            return redirect("request_password_reset")
+    # if the token is changed (invalid signature) or is expired (more than 1 hour), an error will be thrown
+    except (BadSignature, SignatureExpired):
+        messages.error(request, "Token inválido ou expirado, tente novamente")
+        return redirect("request_password_reset")
+
+    if request.method == "POST":
+        try:
+            # transactional context example
+            with transaction.atomic():
+                # save new password
+                new_password = request.POST.get("password")
+                user.set_password(new_password)
+                user.save()
+                # remove token from database
+                PasswordResetToken.objects.filter(user=user, token=token).delete()
+                messages.success(request, "Senha atualizada")
+            return redirect("login")
+        except IntegrityError as ie:
+            messages.error(request, "Erro transacional, tente novamente")
+            logger.error("Erro transacional: ", str(ie))
+        except Exception as e:
+            messages.error(request, "Ocorreu um erro, tente novamente")
+            logger.error("Erro genérico: ", str(e))
+
+    return render(request, "users/password_reset.html", {"token": token})

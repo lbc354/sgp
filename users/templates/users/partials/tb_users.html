@@ -50,10 +50,10 @@
 
           <td title="{{ o.user|default_if_none:'' }}">{{ o.user|default_if_none:'' }}</td>
 
-          <td title="{{ o.email|default_if_none:'' }}">{{ o.email|default_if_none:'' }}</td>
+          <td title="{{ o.user.email|default_if_none:'' }}">{{ o.user.email|default_if_none:'' }}</td>
 
           {% if not inactive %}
-            <td title="{{ o.mfa_enabled|default_if_none:'' }}">{{ o.mfa_enabled|default_if_none:'' }}</td>
+            <td title="{{ o.user.mfa_enabled|yesno:'Sim;Não'|default_if_none:'' }}">{{ o.user.mfa_enabled|yesno:'Sim,Não'|default_if_none:'' }}</td>
           {% endif %}
 
             <td title="{{ o.user.last_login|default_if_none:'' }}">{{ o.last_login|default_if_none:'' }}</td>

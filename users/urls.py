@@ -18,6 +18,6 @@ urlpatterns = [
     path("disable_mfa/<int:user_id>/", views.disable_mfa, name="disable_mfa"),
     path("reset_user_password/<int:user_id>/", views.reset_user_password, name="reset_user_password"),  # reset user's password
     path("reset_password/", views.reset_password, name="reset_password"),  # reset via form
-    path("password_reset/<str:token>/", views.password_reset, name="password_reset"),  # reset via email
     path("request_password_reset/", views.request_password_reset, name="request_password_reset"),  # request reset via email
+    path("password_reset/<str:token>/", views.password_reset, name="password_reset"),  # reset via email
 ]
