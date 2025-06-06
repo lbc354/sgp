@@ -1,7 +1,11 @@
 {% extends 'global/base.html' %}
 
 {% block title %}
-  Usuários Ativos
+  {% if deactivated %}
+    Usuários Desativados
+  {% else %}
+    Usuários Ativos
+  {% endif %}
 {% endblock %}
 
 {% block path %}

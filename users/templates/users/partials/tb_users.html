@@ -52,7 +52,7 @@
 
           <td title="{{ o.user.email|default_if_none:'' }}">{{ o.user.email|default_if_none:'' }}</td>
 
-          {% if not inactive %}
+          {% if not deactivated %}
             <td title="{{ o.user.mfa_enabled|yesno:'Sim;Não'|default_if_none:'' }}">{{ o.user.mfa_enabled|yesno:'Sim,Não'|default_if_none:'' }}</td>
           {% endif %}
 

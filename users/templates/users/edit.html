@@ -11,7 +11,7 @@
   {% if user.pk == request.user.id %}
     <span><a href="{% url 'profile' %}" class="link-secondary link-underline-opacity-25">Perfil</a></span>
   {% else %}
-    <span><a href="{% url 'active_users' %}" class="link-secondary link-underline-opacity-25">Usuários Ativos</a></span>
+    <span><a href="{% url 'active_users' %}" class="link-secondary link-underline-opacity-25">Usuários</a></span>
   {% endif %}
   <span>&gt;</span>
   <span class="text-secondary">Editar</span>

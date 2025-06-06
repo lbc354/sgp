@@ -22,7 +22,10 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     #
     "users",
+    "leaves",
 ]
+
+AUTH_USER_MODEL = "users.CustomUser"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -106,8 +109,6 @@ MESSAGE_TAGS = {
     constants.WARNING: "warning",
     constants.SUCCESS: "success",
 }
-
-AUTH_USER_MODEL = "users.CustomUser"
 
 if DEBUG == False:
     STATICFILES_STORAGE = (

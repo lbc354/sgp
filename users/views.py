@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.contrib import messages
+from django.http import HttpResponseForbidden
 from django.utils import timezone
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 from django.db import transaction, IntegrityError
@@ -172,7 +173,11 @@ def mfa(request):
         otp = request.POST.get("otp_code")
 
         # get user by id
-        user = get_user_model().objects.get(id=user_id)
+        try:
+            user = get_user_model().objects.get(id=user_id)
+        except get_user_model().DoesNotExist:
+            messages.error(request, "Usuário não encontrado")
+            return redirect("login")
 
         # if true
         if verify_mfa_otp(user, otp):
@@ -227,7 +232,7 @@ def profile(request):
     # name=user.email -> shows user's email in authenticator app.
     # issuer_name="app_name" -> shows application's name in authenticator app
     otp_uri = pyotp.totp.TOTP(user.mfa_secret).provisioning_uri(
-        name=user.email, issuer_name="sgp_app"
+        name=user.email, issuer_name="my_app"
     )
 
     # generates a qr code from "otpauth://totp/..." uri
@@ -273,9 +278,18 @@ def edit(request, user_id=None):
         is_denied = deny_if_not_in_group(request, "manage_users")
         if is_denied:
             return is_denied
+        if user.is_superuser:
+            return HttpResponseForbidden(
+                render(request, "global/partials/access_denied.html")
+            )
 
     if request.method == "POST":
-        form = CustomUserChangeForm(request.POST, instance=user, request=request)
+        form = CustomUserChangeForm(
+            request.POST,
+            instance=user,
+            request=request,
+            itself=(request.user.id == user.id),
+        )
         if form.is_valid():
             try:
                 # transactional context example
@@ -291,7 +305,9 @@ def edit(request, user_id=None):
                 logger.error("Erro genérico: ", str(e))
 
     else:
-        form = CustomUserChangeForm(instance=user, request=request)
+        form = CustomUserChangeForm(
+            instance=user, request=request, itself=(request.user.id == user.id)
+        )
 
     return render(
         request,
@@ -469,7 +485,7 @@ def deactivated_users(request):
             "page_obj": page_obj,
             "pagination_range": pagination_range,
             "deactivated": "deactivated",
-            "can_manage_users":can_manage_users,
+            "can_manage_users": can_manage_users,
             # "can_add_user": can_add_user,
         },
     )
@@ -485,6 +501,11 @@ def activate_user(request, user_id):
     except get_user_model().DoesNotExist:
         messages.error(request, "Usuário não encontrado")
         return redirect("deactivated_users")
+
+    if user.is_superuser:
+        return HttpResponseForbidden(
+            render(request, "global/partials/access_denied.html")
+        )
 
     # activate user
     if not user.is_active:
@@ -508,6 +529,11 @@ def deactivate_user(request, user_id):
         messages.error(request, "Usuário não encontrado")
         return redirect("active_users")
 
+    if user.is_superuser:
+        return HttpResponseForbidden(
+            render(request, "global/partials/access_denied.html")
+        )
+
     # deactivate user
     if user.is_active:
         user.is_active = False
@@ -530,6 +556,11 @@ def disable_mfa(request, user_id):
         messages.error(request, "Usuário não encontrado")
         return redirect("active_users")
 
+    if user.is_superuser:
+        return HttpResponseForbidden(
+            render(request, "global/partials/access_denied.html")
+        )
+
     # disable mfa
     if user.mfa_enabled:
         user.mfa_enabled = False
@@ -551,6 +582,11 @@ def reset_user_password(request, user_id):
     except get_user_model().DoesNotExist:
         messages.error(request, "Usuário não encontrado")
         return redirect("active_users")
+
+    if user.is_superuser:
+        return HttpResponseForbidden(
+            render(request, "global/partials/access_denied.html")
+        )
 
     # reset password
     user.set_password(settings.DEFAULT_USER_PASSWORD)
@@ -604,6 +640,11 @@ def request_password_reset(request):
             messages.error(request, "E-mail não encontrado")
             return render(request, "users/request_password_reset.html")
 
+        if user.is_superuser:
+            return HttpResponseForbidden(
+                render(request, "global/partials/access_denied.html")
+            )
+
         # create unique token for password reset
         token = signer.sign(user.id)
         PasswordResetToken.objects.create(user=user, token=token)
@@ -625,7 +666,7 @@ def request_password_reset(request):
         </html>
         """
 
-        sender = "svc.sgp@dnit.gov.br"
+        sender = "svc.my_app@dnit.gov.br"
         recipient = email
         subject = "Redefinição de Senha"
 
@@ -665,6 +706,12 @@ def password_reset(request, token):
         except get_user_model().DoesNotExist:
             messages.error(request, "Usuário não encontrado, tente novamente")
             return redirect("request_password_reset")
+
+        if user.is_superuser:
+            return HttpResponseForbidden(
+                render(request, "global/partials/access_denied.html")
+            )
+
     # if the token is changed (invalid signature) or is expired (more than 1 hour), an error will be thrown
     except (BadSignature, SignatureExpired):
         messages.error(request, "Token inválido ou expirado, tente novamente")

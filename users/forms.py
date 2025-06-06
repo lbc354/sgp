@@ -1,11 +1,13 @@
 from django import forms
+from django.conf import settings
 from django.contrib.auth.forms import (
     AuthenticationForm,
+    UserCreationForm,
     UserChangeForm,
     PasswordChangeForm,
 )
 from .models import CustomUser
-from django.conf import settings
+from utils.decorators import user_is_in_group
 
 
 class CustomAuthenticationForm(AuthenticationForm):
@@ -22,6 +24,7 @@ class CustomAuthenticationForm(AuthenticationForm):
     )
 
 
+# class CustomUserCreationForm(UserCreationForm):
 class CustomUserCreationForm(forms.ModelForm):
     class Meta:
         model = CustomUser
@@ -46,14 +49,16 @@ class CustomUserCreationForm(forms.ModelForm):
                 field.widget.attrs["class"] += " form-control"
             else:
                 field.widget.attrs["class"] = "form-control"
-    
+
     def clean(self):
         cleaned_data = super().clean()  # calls the parent class's clean method
 
         # clean whitespace from all fields in the form
         for campo, valor in cleaned_data.items():
             if isinstance(valor, str):  # check if the value is a string
-                cleaned_data[campo] = valor.strip()  # remove leading and trailing spaces
+                cleaned_data[campo] = (
+                    valor.strip()
+                )  # remove leading and trailing spaces
 
         return cleaned_data
 
@@ -82,6 +87,7 @@ class CustomUserChangeForm(UserChangeForm):
         }
 
     def __init__(self, *args, request=None, **kwargs):
+        itself = kwargs.pop("itself", None)
         super().__init__(*args, **kwargs)
 
         # adds css class
@@ -93,20 +99,20 @@ class CustomUserChangeForm(UserChangeForm):
 
         if request is not None:
             self.fields.pop("password", None)
-            self.fields.pop("groups", None)
-            # check if user has permissions
-            # has_permissions = check_permissions(request).get("is_allowed", False)
-            # if doesn't have required permission, hide inputs
-            # if not has_permissions:
-            #     self.fields.pop("groups", None)
-    
+            # user can't edit groups/permissions if he doesn't have permission to
+            # user can't edit own groups/permissions
+            if not user_is_in_group(request, "manage_users") or itself:
+                self.fields.pop("groups", None)
+
     def clean(self):
         cleaned_data = super().clean()  # calls the parent class's clean method
 
         # clean whitespace from all fields in the form
         for campo, valor in cleaned_data.items():
             if isinstance(valor, str):  # check if the value is a string
-                cleaned_data[campo] = valor.strip()  # remove leading and trailing spaces
+                cleaned_data[campo] = (
+                    valor.strip()
+                )  # remove leading and trailing spaces
 
         return cleaned_data
 
