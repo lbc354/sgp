@@ -3,8 +3,8 @@ from django.contrib.auth import get_user_model
 from django.utils.timezone import now
 from dateutil.relativedelta import relativedelta
 from django.db.models import Q
-from .models import Leaves
-# from demands.models import Demands
+from leaves.models import Leaves
+from demands.models import Demands
 
 
 class LeavesForm(forms.ModelForm):
@@ -85,6 +85,7 @@ class LeavesForm(forms.ModelForm):
         limit_years = 2
         limit_months = 2
         # before saving the leave, check if there is any demand with a deadline that falls within the period of the leave to be registered
+        # § 2º (explanation in leaves/views.py)
         user = cleaned_data.get("user")
         start_date = cleaned_data.get("start_date")
         end_date = cleaned_data.get("end_date")

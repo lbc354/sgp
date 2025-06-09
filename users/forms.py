@@ -6,7 +6,7 @@ from django.contrib.auth.forms import (
     UserChangeForm,
     PasswordChangeForm,
 )
-from .models import CustomUser
+from users.models import CustomUser
 from utils.decorators import user_is_in_group
 
 

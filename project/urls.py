@@ -10,6 +10,8 @@ urlpatterns = [
     path(f"{BASE_URL}/admin/", admin.site.urls),
     path("", lambda request: redirect(f"/{BASE_URL}/", permanent=True)),
     path(f"{BASE_URL}/", include("users.urls")),
+    path(f"{BASE_URL}/leaves/", include("leaves.urls")),
+    path(f"{BASE_URL}/demands/", include("demands.urls")),
 ]
 
 if settings.DEBUG:

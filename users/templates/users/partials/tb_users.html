@@ -18,7 +18,7 @@
     </thead>
 
     <tbody>
-      {% for o in page_obj %}
+      {% for obj in page_obj %}
         <tr>
           {% if can_manage_users %}
             <td>
@@ -27,20 +27,20 @@
                 <ul class="dropdown-menu">
                   {% if not deactivated %}
                     <li>
-                      <a class="dropdown-item" href="{% url 'edit_id' o.user.pk %}">Editar</a>
+                      <a class="dropdown-item" href="{% url 'edit_id' obj.user.id %}">Editar</a>
                     </li>
                     <li>
-                      <button type="button" class="dropdown-item text-info" data-bs-toggle="modal" data-bs-target="#modalDisable" data-url="{% url 'disable_mfa' o.user.pk %}">Desabilitar MFA</button>
+                      <button type="button" class="dropdown-item text-info" data-bs-toggle="modal" data-bs-target="#modalDisable" data-url="{% url 'disable_mfa' obj.user.id %}">Desabilitar MFA</button>
                     </li>
                     <li>
-                      <button type="button" class="dropdown-item text-warning" data-bs-toggle="modal" data-bs-target="#modalReset" data-url="{% url 'reset_user_password' o.user.pk %}">Redefinir Senha</button>
+                      <button type="button" class="dropdown-item text-warning" data-bs-toggle="modal" data-bs-target="#modalReset" data-url="{% url 'reset_user_password' obj.user.id %}">Redefinir Senha</button>
                     </li>
                     <li>
-                      <button type="button" class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#modalDeactivate" data-url="{% url 'deactivate_user' o.user.pk %}">Desativar</button>
+                      <button type="button" class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#modalDeactivate" data-url="{% url 'deactivate_user' obj.user.id %}">Desativar</button>
                     </li>
                   {% else %}
                     <li>
-                      <button type="button" class="dropdown-item text-primary" data-bs-toggle="modal" data-bs-target="#modalActivate" data-url="{% url 'activate_user' o.user.pk %}">Ativar</button>
+                      <button type="button" class="dropdown-item text-primary" data-bs-toggle="modal" data-bs-target="#modalActivate" data-url="{% url 'activate_user' obj.user.id %}">Ativar</button>
                     </li>
                   {% endif %}
                 </ul>
@@ -48,19 +48,19 @@
             </td>
           {% endif %}
 
-          <td title="{{ o.user|default_if_none:'' }}">{{ o.user|default_if_none:'' }}</td>
+          <td title="{{ obj.user|default_if_none:'' }}">{{ obj.user|default_if_none:'' }}</td>
 
-          <td title="{{ o.user.email|default_if_none:'' }}">{{ o.user.email|default_if_none:'' }}</td>
+          <td title="{{ obj.user.email|default_if_none:'' }}">{{ obj.user.email|default_if_none:'' }}</td>
 
           {% if not deactivated %}
-            <td title="{{ o.user.mfa_enabled|yesno:'Sim;Não'|default_if_none:'' }}">{{ o.user.mfa_enabled|yesno:'Sim,Não'|default_if_none:'' }}</td>
+            <td title="{{ obj.user.mfa_enabled|yesno:'Sim;Não'|default_if_none:'' }}">{{ obj.user.mfa_enabled|yesno:'Sim,Não'|default_if_none:'' }}</td>
           {% endif %}
 
-            <td title="{{ o.user.last_login|default_if_none:'' }}">{{ o.last_login|default_if_none:'' }}</td>
+          <td title="{{ obj.user.last_login|default_if_none:'' }}">{{ obj.last_login|default_if_none:'' }}</td>
 
-            <td title="{{ o.user.date_joined|default_if_none:'' }}">{{ o.date_joined|default_if_none:'' }}</td>
+          <td title="{{ obj.user.date_joined|default_if_none:'' }}">{{ obj.date_joined|default_if_none:'' }}</td>
 
-            <td title="{{ o.user.updated_at|default_if_none:'' }}">{{ o.updated_at|default_if_none:'' }}</td>
+          <td title="{{ obj.user.updated_at|default_if_none:'' }}">{{ obj.updated_at|default_if_none:'' }}</td>
         </tr>
       {% empty %}
         <tr>
@@ -85,7 +85,7 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title fs-5" id="modalDisableLabel">Confirmação</h2>
+        <h3 class="modal-title fs-5" id="modalDisableLabel">Confirmação</h3>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">Desabilitar MFA deste usuário?</div>
@@ -104,7 +104,7 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title fs-5" id="modalResetLabel">Confirmação</h2>
+        <h3 class="modal-title fs-5" id="modalResetLabel">Confirmação</h3>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">Redefinir senha deste usuário?</div>
@@ -123,7 +123,7 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title fs-5" id="modalDeactivateLabel">Confirmação</h2>
+        <h3 class="modal-title fs-5" id="modalDeactivateLabel">Confirmação</h3>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">Desativar este usuário?</div>
@@ -142,7 +142,7 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title fs-5" id="modalActivateLabel">Confirmação</h2>
+        <h3 class="modal-title fs-5" id="modalActivateLabel">Confirmação</h3>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">Ativar este usuário?</div>

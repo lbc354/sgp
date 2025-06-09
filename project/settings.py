@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     #
     "users",
     "leaves",
+    "demands",
 ]
 
 AUTH_USER_MODEL = "users.CustomUser"
@@ -110,19 +111,28 @@ MESSAGE_TAGS = {
     constants.SUCCESS: "success",
 }
 
+#  access https://myaccount.google.com/security and activate two-step verification
+# then access https://myaccount.google.com/apppasswords and create the app password
+# you'll receive a 16 characters password. keep it.
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'lbarroscarregozi@gmail.com'
+EMAIL_HOST_PASSWORD = 'mpty tojb qrda vtvg'
+
 if DEBUG == False:
     STATICFILES_STORAGE = (
         "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
     )
 
-# funciona? precisamos?
-
+# does it work? do we need?
 # SECURE_BROWSER_XSS_FILTER = True
 # SECURE_CONTENT_TYPE_NOSNIFF = True
-# SESSION_COOKIE_SECURE = True  # Só envia cookies por HTTPS
-# CSRF_COOKIE_SECURE = True  # Protege contra CSRF em HTTPS
-# X_FRAME_OPTIONS = "DENY"  # Protege contra ataques de clickjacking
-# SECURE_SSL_REDIRECT = True  # Redireciona HTTP para HTTPS
+# SESSION_COOKIE_SECURE = True  # only sends cookies over https
+# CSRF_COOKIE_SECURE = True  # protects against csrf over https
+# X_FRAME_OPTIONS = "DENY"  # protects against clickjacking attacks
+# SECURE_SSL_REDIRECT = True  # redirect http to https
 
-# Se estiver usando proxy/reverso (exemplo: Nginx), adicione:
+# if ur using proxy/reverse (example: nginx), add:
 # SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

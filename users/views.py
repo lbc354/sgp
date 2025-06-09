@@ -1,9 +1,3 @@
-from django.conf import settings
-from django.contrib import messages
-from django.http import HttpResponseForbidden
-from django.utils import timezone
-from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
-from django.db import transaction, IntegrityError
 from django.contrib.auth import login, logout, get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.sites.shortcuts import get_current_site
@@ -11,6 +5,14 @@ from django.shortcuts import redirect, render, resolve_url
 from django.urls import reverse
 from utils.decorators import group_required, deny_if_not_in_group, user_is_in_group
 from utils.pagination import make_pagination
+from django.utils.html import strip_tags
+from django.core.mail import send_mail, EmailMessage, EmailMultiAlternatives
+from django.conf import settings
+from django.contrib import messages
+from django.utils import timezone
+from django.db import transaction, IntegrityError
+from django.http import HttpResponseForbidden
+from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 from users.models import PasswordResetToken
 from users.forms import (
     CustomAuthenticationForm,
@@ -18,9 +20,6 @@ from users.forms import (
     CustomUserChangeForm,
     CustomPasswordChangeForm,
 )
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import smtplib
 import pyotp
 import qrcode
 import io
@@ -157,10 +156,10 @@ def verify_mfa_otp(user, otp):
 
 # activate on profile page or verify during login
 def mfa(request):
+    return_page_action = reverse("login")
     # get the values ​​of the hidden inputs
     user_id = request.POST.get("user_id")
     next_url = request.POST.get("next_url")
-    # next_url = resolve_url(request.GET.get("next", reverse("home")))
 
     # if id is not found
     if not user_id:
@@ -211,6 +210,7 @@ def mfa(request):
                 {
                     "user_id": user_id,
                     "next_url": next_url,
+                    "return_page_action": return_page_action,
                 },
             )
 
@@ -415,7 +415,7 @@ def active_users(request):
 
     return render(
         request,
-        "users/users_list.html",
+        "users/users.html",
         {
             "page_obj": page_obj,
             "pagination_range": pagination_range,
@@ -480,7 +480,7 @@ def deactivated_users(request):
 
     return render(
         request,
-        "users/users_list.html",
+        "users/users.html",
         {
             "page_obj": page_obj,
             "pagination_range": pagination_range,
@@ -596,7 +596,7 @@ def reset_user_password(request, user_id):
     return redirect("active_users")
 
 
-# reset own password via form
+# reset own password via form in edit page
 @login_required
 def reset_password(request):
     # example of how we can control paths in the front-end by the back-end
@@ -631,14 +631,19 @@ def reset_password(request):
 
 # request own password reset via email
 def request_password_reset(request):
+    return_page_action = reverse("login")
     if request.method == "POST":
         # try to get user
         try:
-            email = request.POST.get("email")
-            user = get_user_model().objects.get(email=email)
+            recipient = request.POST.get("email")
+            user = get_user_model().objects.get(email=recipient)
         except get_user_model().DoesNotExist:
             messages.error(request, "E-mail não encontrado")
-            return render(request, "users/request_password_reset.html")
+            return render(
+                request,
+                "users/request_password_reset.html",
+                {"return_page_action": return_page_action},
+            )
 
         if user.is_superuser:
             return HttpResponseForbidden(
@@ -655,7 +660,11 @@ def request_password_reset(request):
             f"http://{current_site.domain}{reverse('password_reset', args=[token])}"
         )
 
-        email_message = f"""
+        subject = "Redefinição de Senha"
+        sender = "lbarroscarregozi@gmail.com"
+        recipient_list = [recipient]
+
+        email_content = f"""
         <html>
             <body>
                 <p>Olá, {user}!</p>
@@ -666,21 +675,15 @@ def request_password_reset(request):
         </html>
         """
 
-        sender = "svc.my_app@dnit.gov.br"
-        recipient = email
-        subject = "Redefinição de Senha"
-
-        msg = MIMEMultipart()
-        msg["From"] = sender
-        msg["To"] = recipient
-        msg["Subject"] = subject
-        msg.attach(MIMEText(email_message, "html"))
+        text_content = strip_tags(email_content)  # generates text version
 
         try:
-            server = smtplib.SMTP("10.100.10.45")
-            server.sendmail(sender, recipient, msg.as_string())
-            server.quit()
-            messages.success(request, "E-mail de redefinição enviado")
+            email = EmailMultiAlternatives(
+                subject, text_content, sender, recipient_list
+            )
+            email.attach_alternative(email_content, "text/html")
+            email.send()
+            messages.success(request, f"E-mail de redefinição enviado para {recipient}")
         except Exception as e:
             logger.error(
                 f"REQUEST_PASSWORD_RESET | Erro ao enviar email para {recipient}: {str(e)}"
@@ -689,11 +692,16 @@ def request_password_reset(request):
 
         return redirect("request_password_reset")
 
-    return render(request, "users/request_password_reset.html")
+    return render(
+        request,
+        "users/request_password_reset.html",
+        {"return_page_action": return_page_action},
+    )
 
 
-# reset own password via email
+# reset own password via form sent via email
 def password_reset(request, token):
+    return_page_action = reverse("login")
     try:
         # check and decode token
         user_id = signer.unsign(
@@ -736,4 +744,8 @@ def password_reset(request, token):
             messages.error(request, "Ocorreu um erro, tente novamente")
             logger.error("Erro genérico: ", str(e))
 
-    return render(request, "users/password_reset.html", {"token": token})
+    return render(
+        request,
+        "users/password_reset.html",
+        {"token": token, "return_page_action": return_page_action},
+    )

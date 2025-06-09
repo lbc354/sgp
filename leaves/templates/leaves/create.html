@@ -2,15 +2,15 @@
 {% load static %}
 
 {% block title %}
-  Cadastrar
+  Cadastrar Afastamento
 {% endblock %}
 
 {% block path %}
   <span><a href="{% url 'home' %}" class="link-secondary link-underline-opacity-25">Início</a></span>
   <span>&gt;</span>
-  <span><a href="{% url 'active_users' %}" class="link-secondary link-underline-opacity-25">Usuários</a></span>
+  <span><a href="{% url 'leaves_view' %}" class="link-secondary link-underline-opacity-25">Afastamentos</a></span>
   <span>&gt;</span>
-  <span class="text-secondary">Cadastro</span>
+  <span class="text-secondary">Cadastrar</span>
 {% endblock %}
 
 {% block content %}

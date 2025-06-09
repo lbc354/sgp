@@ -8,7 +8,7 @@
   <div class="card col-md-6 mx-auto">
     <div class="card-body">
       <h1 class="card-title mb-3">Entrar</h1>
-      <form class="row g-3" action="{{ form_action }}" method="POST">
+      <form class="row g-3" method="POST">
         {% csrf_token %}
         {% for field in form %}
           {{ field }}
