@@ -2,7 +2,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.auth.forms import (
     AuthenticationForm,
-    UserCreationForm,
+    # UserCreationForm,
     UserChangeForm,
     PasswordChangeForm,
 )
@@ -87,7 +87,7 @@ class CustomUserChangeForm(UserChangeForm):
         }
 
     def __init__(self, *args, request=None, **kwargs):
-        itself = kwargs.pop("itself", None)
+        is_itself = kwargs.pop("is_itself", None)
         super().__init__(*args, **kwargs)
 
         # adds css class
@@ -101,7 +101,7 @@ class CustomUserChangeForm(UserChangeForm):
             self.fields.pop("password", None)
             # user can't edit groups/permissions if he doesn't have permission to
             # user can't edit own groups/permissions
-            if not user_is_in_group(request, "manage_users") or itself:
+            if not user_is_in_group(request, "manage_users") or is_itself:
                 self.fields.pop("groups", None)
 
     def clean(self):

@@ -115,19 +115,19 @@ class LeavesForm(forms.ModelForm):
             # end_date validation
             if end_date > start_date + relativedelta(months=limit_months):
                 raise forms.ValidationError(
-                    {
-                        "end_date": f"Fora do prazo de até {limit_months} meses."
-                    }
+                    {"end_date": f"Fora do prazo de até {limit_months} meses."}
                 )
 
             if user:
                 pending_demand = Demands.objects.filter(
-                    responsible=user,
-                    filed=False,
-                    demand_deadline__range=(start_date, end_date),
+                    assigned_to=user,
+                    archived=False,
+                    due_date__range=(start_date, end_date),
                 )
                 if pending_demand.exists():
-                    raise forms.ValidationError({"start_date": "Demanda com prazo pendente neste período."})
+                    raise forms.ValidationError(
+                        {"start_date": "Demanda com prazo pendente neste período."}
+                    )
 
         else:
             raise forms.ValidationError(

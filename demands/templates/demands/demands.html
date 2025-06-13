@@ -1,21 +1,21 @@
 {% extends 'global/base.html' %}
 
 {% block title %}
-  Afastamentos
+  Demandas
 {% endblock %}
 
 {% block path %}
   <span><a href="{% url 'home' %}" class="link-secondary link-underline-opacity-25">Início</a></span>
   <span>&gt;</span>
-  <span class="text-secondary">Afastamentos</span>
+  <span class="text-secondary">Demandas</span>
 {% endblock %}
 
 {% block content %}
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 my-4">
-    <h1 class="">Afastamentos</h1>
+    <h1 class="">Demandas</h1>
     <div class="d-flex align-items-center gap-2 ms-auto">
       {% if can_manage_users %}
-        <a href="{% url 'leave_create' %}" class="btn btn-primary d-flex align-items-center ms-auto"><span class="d-none d-sm-block">Adicionar</span><i class="bi bi-plus"></i></a>
+        {% comment %} <a href="{% url 'demand_create' %}" class="btn btn-primary d-flex align-items-center ms-auto"><span class="d-none d-sm-block">Adicionar</span><i class="bi bi-plus"></i></a> {% endcomment %}
       {% endif %}
     </div>
   </div>
@@ -24,5 +24,5 @@
     {% include 'global/partials/search_table.html' %}
   </div>
 
-  {% include 'leaves/partials/tb_leaves.html' %}
+  {% include 'demands/partials/tb_demands.html' %}
 {% endblock %}

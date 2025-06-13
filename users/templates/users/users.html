@@ -23,9 +23,7 @@
       {% else %}
         <a class="btn btn-light border" href="{% url 'deactivated_users' %}" role="button">Desativados</a>
       {% endif %}
-      {% if can_manage_users %}
-        <a href="{% url 'register' %}" class="btn btn-primary d-flex align-items-center ms-auto"><span class="d-none d-sm-block">Adicionar</span><i class="bi bi-plus"></i></a>
-      {% endif %}
+      <a href="{% url 'register' %}" class="btn btn-primary d-flex align-items-center ms-auto"><span class="d-none d-sm-block">Adicionar</span><i class="bi bi-plus"></i></a>
     </div>
   </div>
 
@@ -34,5 +32,4 @@
   </div>
 
   {% include 'users/partials/tb_users.html' %}
-
 {% endblock %}

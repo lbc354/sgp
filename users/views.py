@@ -38,7 +38,6 @@ def home(request):
 
 
 # access denied page
-@login_required
 def access_denied(request):
     return render(request, "global/partials/access_denied.html")
 
@@ -46,7 +45,7 @@ def access_denied(request):
 # log out user
 def logout_action(request):
     logout(request)
-    messages.info(request, "Usuário saiu")
+    messages.info(request, "Usuário saiu.")
     return redirect("login")
 
 
@@ -54,7 +53,7 @@ def logout_action(request):
 def login_action(request):
     form_mfa_action = reverse("mfa")
     next_url = resolve_url(request.GET.get("next", reverse("home")))
-    # if user is authenticated, redirect to home
+    # if user is already authenticated, redirect to home
     if request.user and request.user.is_authenticated:
         return redirect("home")
 
@@ -68,7 +67,7 @@ def login_action(request):
 
             # if user is NOT active, don't allow to log in
             if not user.is_active:
-                messages.warning(request, "Usuário desativado")
+                messages.warning(request, "Usuário desativado.")
                 return redirect("login")
 
             # if user has no mfa enabled and no mfa secret (e.g., it's their first login), generate a secret key for them
@@ -91,8 +90,8 @@ def login_action(request):
 
             # log user in
             login(request, user)
-            messages.info(request, "Usuário entrou")
 
+            messages.info(request, "Usuário entrou.")
             # redirect after login
             return (
                 redirect("reset_password")
@@ -100,9 +99,9 @@ def login_action(request):
                 else redirect(next_url)
             )
 
-        # if wrong data
+        # if wrong data or user not found
         else:
-            messages.error(request, "Usuário ou senha incorretos, tente novamente")
+            messages.error(request, "Usuário ou senha incorretos, tente novamente.")
             return render(
                 request,
                 "users/login.html",
@@ -133,7 +132,7 @@ def verify_default_password(request):
     ):
         messages.warning(
             request,
-            "Você está usando uma senha padrão e insegura, mude-a",
+            "Você está usando uma senha padrão e insegura, mude-a.",
         )
         return True
     return False
@@ -160,35 +159,35 @@ def mfa(request):
     # get the values ​​of the hidden inputs
     user_id = request.POST.get("user_id")
     next_url = request.POST.get("next_url")
+    # get the otp code
+    otp = request.POST.get("otp_code")
 
     # if id is not found
     if not user_id:
-        messages.error(request, "Ocorreu um erro, tente novamente")
+        messages.error(request, "Ocorreu um erro, tente novamente.")
+        return redirect("login")
+
+    # get user by id
+    try:
+        user = get_user_model().objects.get(id=user_id)
+    except get_user_model().DoesNotExist:
+        messages.error(request, "Usuário não encontrado, tente novamente.")
         return redirect("login")
 
     # if POST method
     if request.method == "POST":
-        # get the otp code
-        otp = request.POST.get("otp_code")
-
-        # get user by id
-        try:
-            user = get_user_model().objects.get(id=user_id)
-        except get_user_model().DoesNotExist:
-            messages.error(request, "Usuário não encontrado")
-            return redirect("login")
 
         # if true
         if verify_mfa_otp(user, otp):
             # user in profile page activating mfa
             if request.user and request.user.is_authenticated:
-                messages.success(request, "MFA ativado")
+                messages.success(request, "MFA ativado.")
                 return redirect("profile")
 
             # user in mfa page authenticating
             login(request, user)
-            messages.info(request, "Usuário entrou")
 
+            messages.info(request, "Usuário entrou.")
             return (
                 redirect("reset_password")
                 if verify_default_password(request)
@@ -197,7 +196,7 @@ def mfa(request):
 
         # if false
         else:
-            messages.error(request, "Código inválido, tente novamente")
+            messages.error(request, "Código inválido, tente novamente.")
 
             # user in profile page failed activating mfa
             if request.user and request.user.is_authenticated:
@@ -225,7 +224,7 @@ def profile(request):
 
     # if user doesn't have mfa enabled, alert them
     if not user.mfa_enabled:
-        messages.warning(request, "Ative Autenticação de Dois Fatores")
+        messages.warning(request, "Ative autenticação de dois fatores.")
 
     # pyotp.totp.TOTP(user.mfa_secret) -> creates a totp generator based on the user's secret
     # provisioning_uri(...) -> generates an uri in otpauth://totp/... format that can be scanned by apps like google authenticator
@@ -258,27 +257,25 @@ def profile(request):
 
 # edit page and edit action
 @login_required
+@transaction.atomic
 def edit(request, user_id=None):
-    # example of how we can control paths in the front-end by the back-end
-    return_page_action = reverse("active_users") if user_id else reverse("profile")
-
     # if there is id in url, try to get user
     if user_id:
+        return_page_action = reverse("active_users")
         try:
             user = get_user_model().objects.get(id=user_id)
         except get_user_model().DoesNotExist:
-            messages.error(request, "Usuário não encontrado")
+            messages.error(request, "Usuário não encontrado.")
             return redirect("active_users")
     # if no id in url, the instance gonna be the authenticated user
     else:
+        return_page_action = reverse("profile")
         user = request.user
 
     # if an user without permissions is trying to access the edit page of an user other than himself, do not allow
     if request.user and request.user.id != user.id:
         is_denied = deny_if_not_in_group(request, "manage_users")
-        if is_denied:
-            return is_denied
-        if user.is_superuser:
+        if is_denied or user.is_superuser:
             return HttpResponseForbidden(
                 render(request, "global/partials/access_denied.html")
             )
@@ -288,25 +285,40 @@ def edit(request, user_id=None):
             request.POST,
             instance=user,
             request=request,
-            itself=(request.user.id == user.id),
+            is_itself=(request.user.id == user.id),
         )
+
         if form.is_valid():
             try:
-                # transactional context example
-                with transaction.atomic():
-                    form.save()
-                    messages.success(request, "Usuário editado")
+                form.save()
+                messages.success(request, "Usuário editado.")
                 return redirect("active_users") if user_id else redirect("profile")
             except IntegrityError as ie:
-                messages.error(request, "Erro transacional, tente novamente")
-                logger.error("Erro transacional: ", str(ie))
+                logger.error(
+                    f"EDIT_USER | Erro de integridade editando usuário: {str(ie)}."
+                )
+                messages.error(request, "Erro ao editar usuário, tente novamente.")
             except Exception as e:
-                messages.error(request, "Ocorreu um erro, tente novamente")
-                logger.error("Erro genérico: ", str(e))
+                logger.error(f"EDIT_USER | Erro editando usuário: {str(e)}.")
+                messages.error(request, "Erro ao editar usuário, tente novamente.")
 
+        # if wrong data
+        else:
+            messages.error(request, "Usuário ou senha incorretos, tente novamente.")
+            return render(
+                request,
+                "users/edit.html",
+                {
+                    "form": form,
+                    "user": user,
+                    "return_page_action": return_page_action,
+                },
+            )
+
+    # if GET method
     else:
         form = CustomUserChangeForm(
-            instance=user, request=request, itself=(request.user.id == user.id)
+            instance=user, request=request, is_itself=(request.user.id == user.id)
         )
 
     return render(
@@ -322,6 +334,7 @@ def edit(request, user_id=None):
 
 # register page and register action
 @login_required
+@transaction.atomic
 # checking permission example
 # @permission_required("add_customuser", "access_denied")
 # checking group example
@@ -335,20 +348,30 @@ def register(request):
 
         if form.is_valid():
             try:
-                # transactional context example
-                with transaction.atomic():
-                    # user = form.save(commit=False)
-                    # user.save()
-                    # form.save_m2m()
-                    form.save()
-                    messages.success(request, "Usuário cadastrado")
-                return redirect("register")
+                # user = form.save(commit=False)
+                # user.save()
+                # form.save_m2m()
+                form.save()
+                messages.success(request, "Usuário cadastrado.")
             except IntegrityError as ie:
-                messages.error(request, "Erro transacional, tente novamente")
-                logger.error("Erro transacional: ", str(ie))
+                logger.error(
+                    f"REGISTER_USER | Erro de intergidade cadastrando usuário: {str(ie)}."
+                )
+                messages.error(request, "Erro ao cadastrar usuário, tente novamente.")
             except Exception as e:
-                messages.error(request, "Ocorreu um erro, tente novamente")
-                logger.error("Erro genérico: ", str(e))
+                logger.error(f"REGISTER_USER | Erro cadastrando usuário: {str(e)}.")
+                messages.error(request, "Erro ao cadastrar usuário, tente novamente.")
+
+            return redirect("register")
+
+        # if wrong data or user not found
+        else:
+            messages.error(request, "Usuário ou senha incorretos, tente novamente.")
+            return render(
+                request,
+                "users/register.html",
+                {"form": form, "return_page_action": return_page_action},
+            )
 
     else:
         form = CustomUserCreationForm()
@@ -362,9 +385,9 @@ def register(request):
 
 # active users list
 @login_required
+@group_required("manage_users")
 def active_users(request):
     # can_add_users = request.user.has_perm("users.add_customuser")
-    can_manage_users = user_is_in_group(request, "manage_users")
 
     # get query from url (.../?q=str)
     query = request.GET.get("q", "").strip().lower()
@@ -389,14 +412,14 @@ def active_users(request):
                     if user.last_login
                     else "---------"
                 ),
-                "date_joined": (
-                    timezone.localtime(user.date_joined).strftime("%d/%m/%Y %H:%M")
-                    if user.date_joined
-                    else "---------"
-                ),
                 "updated_at": (
                     timezone.localtime(user.updated_at).strftime("%d/%m/%Y %H:%M")
                     if user.updated_at
+                    else "---------"
+                ),
+                "date_joined": (
+                    timezone.localtime(user.date_joined).strftime("%d/%m/%Y %H:%M")
+                    if user.date_joined
                     else "---------"
                 ),
             }
@@ -419,7 +442,6 @@ def active_users(request):
         {
             "page_obj": page_obj,
             "pagination_range": pagination_range,
-            "can_manage_users": can_manage_users,
             # "can_add_user": can_add_user,
         },
     )
@@ -427,9 +449,9 @@ def active_users(request):
 
 # deactivated users list
 @login_required
+@group_required("manage_users")
 def deactivated_users(request):
     # can_add_user = request.user.has_perm("users.add_customuser")
-    can_manage_users = user_is_in_group(request, "manage_users")
 
     # get query from url (.../?q=str)
     query = request.GET.get("q", "").strip().lower()
@@ -454,14 +476,14 @@ def deactivated_users(request):
                     if user.last_login
                     else "---------"
                 ),
-                "date_joined": (
-                    timezone.localtime(user.date_joined).strftime("%d/%m/%Y %H:%M")
-                    if user.date_joined
-                    else "---------"
-                ),
                 "updated_at": (
                     timezone.localtime(user.updated_at).strftime("%d/%m/%Y %H:%M")
                     if user.updated_at
+                    else "---------"
+                ),
+                "date_joined": (
+                    timezone.localtime(user.date_joined).strftime("%d/%m/%Y %H:%M")
+                    if user.date_joined
                     else "---------"
                 ),
             }
@@ -485,7 +507,6 @@ def deactivated_users(request):
             "page_obj": page_obj,
             "pagination_range": pagination_range,
             "deactivated": "deactivated",
-            "can_manage_users": can_manage_users,
             # "can_add_user": can_add_user,
         },
     )
@@ -493,13 +514,14 @@ def deactivated_users(request):
 
 # activate deactivated user
 @login_required
+@transaction.atomic
 @group_required("manage_users")
 def activate_user(request, user_id):
     # try to get user
     try:
         user = get_user_model().objects.get(id=user_id)
     except get_user_model().DoesNotExist:
-        messages.error(request, "Usuário não encontrado")
+        messages.error(request, "Usuário não encontrado.")
         return redirect("deactivated_users")
 
     if user.is_superuser:
@@ -509,24 +531,29 @@ def activate_user(request, user_id):
 
     # activate user
     if not user.is_active:
-        user.is_active = True
-        user.save()
-        messages.success(request, "Usuário ativado")
+        try:
+            user.is_active = True
+            user.save()
+            messages.success(request, "Usuário ativado.")
+        except Exception as e:
+            logger.error(f"ACTIVATE_USER | Erro ativando usuário: {str(e)}.")
+            messages.error(request, "Erro ao ativar usuário.")
     else:
-        messages.info(request, "Usuário já está ativado")
+        messages.info(request, "Usuário já está ativado.")
 
     return redirect("deactivated_users")
 
 
 # deactivate active user
 @login_required
+@transaction.atomic
 @group_required("manage_users")
 def deactivate_user(request, user_id):
     # try to get user
     try:
         user = get_user_model().objects.get(id=user_id)
     except get_user_model().DoesNotExist:
-        messages.error(request, "Usuário não encontrado")
+        messages.error(request, "Usuário não encontrado.")
         return redirect("active_users")
 
     if user.is_superuser:
@@ -536,24 +563,29 @@ def deactivate_user(request, user_id):
 
     # deactivate user
     if user.is_active:
-        user.is_active = False
-        user.save()
-        messages.success(request, "Usuário desativado")
+        try:
+            user.is_active = False
+            user.save()
+            messages.success(request, "Usuário desativado.")
+        except Exception as e:
+            logger.error(f"Erro desativando usuário: {str(e)}.")
+            messages.error(request, "Erro ao desativar usuário.")
     else:
-        messages.info(request, "Usuário já está desativado")
+        messages.info(request, "Usuário já está desativado.")
 
     return redirect("active_users")
 
 
 # disable user's mfa
 @login_required
+@transaction.atomic
 @group_required("manage_users")
 def disable_mfa(request, user_id):
     # try to get user
     try:
         user = get_user_model().objects.get(id=user_id)
     except get_user_model().DoesNotExist:
-        messages.error(request, "Usuário não encontrado")
+        messages.error(request, "Usuário não encontrado.")
         return redirect("active_users")
 
     if user.is_superuser:
@@ -563,24 +595,29 @@ def disable_mfa(request, user_id):
 
     # disable mfa
     if user.mfa_enabled:
-        user.mfa_enabled = False
-        user.save()
-        messages.success(request, "MFA desabilitado")
+        try:
+            user.mfa_enabled = False
+            user.save()
+            messages.success(request, "MFA desabilitado.")
+        except Exception as e:
+            logger.error(f"Erro desabilitando MFA: {str(e)}.")
+            messages.error(request, "Erro ao desabilitar MFA.")
     else:
-        messages.info(request, "MFA já está desabilitado")
+        messages.info(request, "MFA já está desabilitado.")
 
     return redirect("active_users")
 
 
 # reset user's password (default password)
 @login_required
+@transaction.atomic
 @group_required("manage_users")
 def reset_user_password(request, user_id):
     # try to get user
     try:
         user = get_user_model().objects.get(id=user_id)
     except get_user_model().DoesNotExist:
-        messages.error(request, "Usuário não encontrado")
+        messages.error(request, "Usuário não encontrado.")
         return redirect("active_users")
 
     if user.is_superuser:
@@ -589,36 +626,53 @@ def reset_user_password(request, user_id):
         )
 
     # reset password
-    user.set_password(settings.DEFAULT_USER_PASSWORD)
-    user.save()
-    messages.success(request, "Senha redefinida")
+    try:
+        user.set_password(settings.DEFAULT_USER_PASSWORD)
+        user.save()
+        messages.success(request, "Senha redefinida.")
+    except Exception as e:
+        logger.error(f"Erro redefinindo senha: {str(e)}.")
+        messages.error(request, "Erro ao redefinir senha.")
 
     return redirect("active_users")
 
 
-# reset own password via form in edit page
+# reset own password via form in profile/edit page
 @login_required
+@transaction.atomic
 def reset_password(request):
     # example of how we can control paths in the front-end by the back-end
     return_page_action = reverse("edit")
 
     if request.method == "POST":
         form = CustomPasswordChangeForm(user=request.user, data=request.POST)
+
         if form.is_valid():
             try:
-                # transactional context example
-                with transaction.atomic():
-                    user = form.save()
-                    # keeps user logged in after changes
-                    update_session_auth_hash(request, user)
-                    messages.success(request, "Senha atualizada")
-                return redirect("profile")
+                user = form.save()
+                # keeps user logged in after changes
+                update_session_auth_hash(request, user)
+                messages.success(request, "Senha atualizada.")
             except IntegrityError as ie:
-                messages.error(request, "Erro transacional, tente novamente")
-                logger.error("Erro transacional: ", str(ie))
+                logger.error(
+                    f"RESET_PASSWORD | Erro de integridade redefinindo senha: {str(ie)}."
+                )
+                messages.error(request, "Erro ao redefinir senha, tente novamente.")
             except Exception as e:
-                messages.error(request, "Ocorreu um erro, tente novamente")
-                logger.error("Erro genérico: ", str(e))
+                logger.error(f"RESET_PASSWORD | Erro redefinindo senha: {str(e)}.")
+                messages.error(request, "Erro ao redefinir senha, tente novamente.")
+
+            return redirect("profile")
+
+        # if wrong data or user not found
+        else:
+            messages.error(request, "Usuário ou senha incorretos, tente novamente.")
+            return render(
+                request,
+                "users/reset_password.html",
+                {"form": form, "return_page_action": return_page_action},
+            )
+
     else:
         form = CustomPasswordChangeForm(user=request.user)
 
@@ -630,6 +684,7 @@ def reset_password(request):
 
 
 # request own password reset via email
+@transaction.atomic
 def request_password_reset(request):
     return_page_action = reverse("login")
     if request.method == "POST":
@@ -638,7 +693,7 @@ def request_password_reset(request):
             recipient = request.POST.get("email")
             user = get_user_model().objects.get(email=recipient)
         except get_user_model().DoesNotExist:
-            messages.error(request, "E-mail não encontrado")
+            messages.error(request, "E-mail não encontrado.")
             return render(
                 request,
                 "users/request_password_reset.html",
@@ -661,7 +716,7 @@ def request_password_reset(request):
         )
 
         subject = "Redefinição de Senha"
-        sender = "lbarroscarregozi@gmail.com"
+        sender = settings.EMAIL_SENDER
         recipient_list = [recipient]
 
         email_content = f"""
@@ -683,12 +738,12 @@ def request_password_reset(request):
             )
             email.attach_alternative(email_content, "text/html")
             email.send()
-            messages.success(request, f"E-mail de redefinição enviado para {recipient}")
+            messages.success(request, f"E-mail enviado para {recipient}.")
         except Exception as e:
             logger.error(
-                f"REQUEST_PASSWORD_RESET | Erro ao enviar email para {recipient}: {str(e)}"
+                f"REQUEST_PASSWORD_RESET | Erro enviando email para {recipient}: {str(e)}."
             )
-            messages.error(request, f"Erro ao enviar email para {recipient}")
+            messages.error(request, f"Erro ao enviar email para {recipient}.")
 
         return redirect("request_password_reset")
 
@@ -700,6 +755,7 @@ def request_password_reset(request):
 
 
 # reset own password via form sent via email
+@transaction.atomic
 def password_reset(request, token):
     return_page_action = reverse("login")
     try:
@@ -712,7 +768,7 @@ def password_reset(request, token):
         try:
             user = get_user_model().objects.get(id=user_id)
         except get_user_model().DoesNotExist:
-            messages.error(request, "Usuário não encontrado, tente novamente")
+            messages.error(request, "Usuário não encontrado, tente novamente.")
             return redirect("request_password_reset")
 
         if user.is_superuser:
@@ -722,27 +778,28 @@ def password_reset(request, token):
 
     # if the token is changed (invalid signature) or is expired (more than 1 hour), an error will be thrown
     except (BadSignature, SignatureExpired):
-        messages.error(request, "Token inválido ou expirado, tente novamente")
+        messages.error(request, "Token inválido ou expirado, tente novamente.")
         return redirect("request_password_reset")
 
     if request.method == "POST":
         try:
-            # transactional context example
-            with transaction.atomic():
-                # save new password
-                new_password = request.POST.get("password")
-                user.set_password(new_password)
-                user.save()
-                # remove token from database
-                PasswordResetToken.objects.filter(user=user, token=token).delete()
-                messages.success(request, "Senha atualizada")
-            return redirect("login")
+            # save new password
+            new_password = request.POST.get("password")
+            user.set_password(new_password)
+            user.save()
+            # remove token from database
+            PasswordResetToken.objects.filter(user=user, token=token).delete()
         except IntegrityError as ie:
-            messages.error(request, "Erro transacional, tente novamente")
-            logger.error("Erro transacional: ", str(ie))
+            logger.error(
+                f"PASSWORD_RESET | Erro de integridade redefinindo senha: {str(ie)}."
+            )
+            messages.error(request, "Erro ao redefinir senha, tente novamente.")
         except Exception as e:
-            messages.error(request, "Ocorreu um erro, tente novamente")
-            logger.error("Erro genérico: ", str(e))
+            logger.error(f"PASSWORD_RESET | Erro redefinindo senha: {str(e)}.")
+            messages.error(request, "Erro ao redefinir senha, tente novamente.")
+
+        messages.success(request, "Senha atualizada.")
+        return redirect("login")
 
     return render(
         request,

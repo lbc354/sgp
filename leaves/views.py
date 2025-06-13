@@ -1,19 +1,25 @@
 from django.conf import settings
+from django.db import transaction
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.sites.shortcuts import get_current_site
 from django.shortcuts import render, redirect
 from django.urls import reverse
-from django.utils.timezone import now
 from utils.pagination import make_pagination
 from utils.decorators import group_required, deny_if_not_in_group, user_is_in_group
+from django.utils.timezone import now
+from django.utils.html import strip_tags
+from django.core.signing import TimestampSigner
+from django.core.mail import EmailMultiAlternatives
+from datetime import datetime, timedelta
 from leaves.models import Leaves
 from leaves.forms import LeavesForm
-from datetime import datetime, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-import smtplib
+import logging
+
+
+logger = logging.getLogger(__name__)
+signer = TimestampSigner()
 
 
 """
@@ -56,7 +62,7 @@ def process_leave(user, users_data):
     current_leave = search_current_leave(user)
 
     if current_leave:
-        current_leave.update_leave_status(current_leave=True)
+        make_user_unavailable(user)
     else:
         make_user_available(user)
 
@@ -81,9 +87,7 @@ def search_current_leave(user):
 
     if next_leave:
         unavailability_start_date = next_leave.start_date
-        leave_period_days = (
-            next_leave.end_date - next_leave.start_date
-        ).days
+        leave_period_days = (next_leave.end_date - next_leave.start_date).days
 
         adjustment = 0
         if leave_period_days <= 10:
@@ -104,16 +108,6 @@ def search_current_leave(user):
         start_date__lte=today,
         end_date__gte=today,
     ).first()
-
-
-def make_user_available(user):
-    Leaves.objects.filter(
-        user=user,
-        is_active=True,
-    ).update(is_active=False)
-    if hasattr(user, "available"):
-        user.available = True
-        user.save()
 
 
 def search_next_leave(user):
@@ -138,6 +132,40 @@ def search_last_leave(user):
         .order_by("-end_date")
         .first()
     )
+
+
+# @transaction.atomic
+def make_user_available(user):
+    # making the leave inactive and the user available
+    try:
+        Leaves.objects.filter(
+            user=user,
+            is_active=True,
+        ).update(is_active=False)
+        if hasattr(user, "available"):
+            user.available = True
+            user.save()
+    except Exception as e:
+        logger.error(
+            f"LEAVES_MAKE_USER_AVAILABLE | Erro disponibilizando usuário: {str(e)}"
+        )
+
+
+# @transaction.atomic
+def make_user_unavailable(user):
+    # making the leave active and the user unavailable
+    try:
+        Leaves.objects.filter(
+            user=user,
+            is_active=False,
+        ).update(is_active=True)
+        if hasattr(user, "available"):
+            user.available = False
+            user.save()
+    except Exception as e:
+        logger.error(
+            f"LEAVES_MAKE_USER_AVAILABLE | Erro indisponibilizando usuário: {str(e)}"
+        )
 
 
 def determine_availability(current_leave):
@@ -224,17 +252,141 @@ def leaves_view(request):
 
 
 @login_required
-@group_required('manage_users')
+@transaction.atomic
+@group_required("manage_users")
+def leave_create(request, user_id=None):
+    if user_id:
+        user_filter = {"id": user_id}
+        initial_data = {"user": user_id}
+        return_page_action = reverse("leaves_active_history", args=[user_id])
+        # get user
+        try:
+            user = get_user_model().objects.get(id=user_id)
+        except get_user_model().DoesNotExist:
+            messages.error(request, "Usuário não encontrado.")
+            return redirect("leaves_view")
+    else:
+        user_filter = {}
+        initial_data = {}
+        return_page_action = reverse("leaves_view")
+
+    if request.method == "POST":
+        form = LeavesForm(
+            request.POST,
+            user_filter=user_filter,
+            initial=initial_data,
+        )
+
+        if form.is_valid():
+            leave = form.save(commit=False)
+            leave.responsible = request.user
+            if user_id:
+                leave.user = user
+            leave.save()
+            current_leave = search_current_leave(leave.user)
+            if current_leave:
+                make_user_unavailable(leave.user)
+            else:
+                make_user_available(leave.user)
+
+            if settings.SEND_EMAILS == True:
+                if leave.user.email:
+                    try:
+                        start_date = leave.start_date.strftime("%d/%m/%Y")
+                        end_date = leave.end_date.strftime("%d/%m/%Y")
+                        leave_description = leave.get_description_display()
+
+                        current_site = get_current_site(request)
+                        domain = current_site.domain
+                        url = f"http://{domain}{reverse('leaves_active_history', args=[leave.user.id])}"
+
+                        subject = f"Registro de {leave_description}"
+                        sender = settings.EMAIL_SENDER
+                        recipient_list = [f"{leave.user.email}"]
+
+                        email_content = f"""
+                        <html>
+                            <body>
+                                <p>Olá, {leave.user}. Um novo registro de {leave_description} ({start_date} - {end_date}) foi distribuído à você por {leave.responsible}.</p>
+                                <p>Veja em: <a href="{url}" target="_blank" rel="noopener noreferrer">Afastamentos</a></p>
+                            </body>
+                        </html>
+                        """
+
+                        text_content = strip_tags(
+                            email_content
+                        )  # generates text version
+
+                        try:
+                            email = EmailMultiAlternatives(
+                                subject, text_content, sender, recipient_list
+                            )
+                            email.attach_alternative(email_content, "text/html")
+                            email.send()
+                            messages.success(
+                                request, f"E-mail enviado para {recipient_list}."
+                            )
+
+                        except Exception as e:
+                            logger.error(
+                                f"LEAVE_CREATE | Erro no envio do email para {recipient_list}: {str(e)}."
+                            )
+                            messages.error(
+                                request,
+                                f"Erro no envio do email para {recipient_list}.",
+                            )
+
+                    except Exception as e:
+                        logger.error(
+                            f"LEAVE_CREATE | Erro ao enviar email para {recipient_list}: {str(e)}."
+                        )
+                        messages.error(
+                            request, f"Erro ao enviar email para {recipient_list}."
+                        )
+
+            messages.success(request, "Afastamento cadastrado.")
+            return redirect("leaves_active_history", leave.user.id)
+
+        else:
+            messages.error(request, f"Dados inválidos, tente novamente.")
+            return render(
+                request,
+                "leaves/create.html",
+                {
+                    "form": form,
+                    "return_page_action": return_page_action,
+                },
+            )
+
+    else:
+        form = LeavesForm(
+            user_filter=user_filter,
+            initial=initial_data,
+        )
+
+    return render(
+        request,
+        "leaves/create.html",
+        {
+            "form": form,
+            "return_page_action": return_page_action,
+        },
+    )
+
+
+@login_required
+@transaction.atomic
+@group_required("manage_users")
 def leave_edit(request, user_id, leave_id):
     # get user
     if user_id:
         try:
             user = get_user_model().objects.get(id=user_id)
         except get_user_model().DoesNotExist:
-            messages.error(request, "Usuário não encontrado")
+            messages.error(request, "Usuário não encontrado.")
             return redirect("leaves_view")
     else:
-        messages.error(request, "Forneça o ID o usuário")
+        messages.error(request, "Forneça o ID do usuário.")
         return redirect("leaves_view")
 
     # get leave
@@ -242,23 +394,15 @@ def leave_edit(request, user_id, leave_id):
         try:
             leave = Leaves.objects.get(id=leave_id)
         except Leaves.DoesNotExist:
-            messages.error(request, "Registro não encontrado")
-            return redirect("leaves_active_history", args=[user_id])
+            messages.error(request, "Registro não encontrado.")
+            return redirect("leaves_active_history", user_id)
     else:
-        messages.error(request, "Forneça o ID do registro")
-        return redirect("leaves_active_history", args=[user_id])
+        messages.error(request, "Forneça o ID do registro.")
+        return redirect("leaves_active_history", user_id)
 
-    # buttons
     return_page_action = reverse("leaves_active_history", args=[user_id])
-
-    # checking if end_date is before today
-    difference = leave.end_date - now().date()
-    gte_hoje = difference.days >= 0
-    if gte_hoje == False and request.method == "POST":
-        return redirect('leave_edit', user_id=user_id, leave_id=leave_id)
-
-    user_filter = {"id": user_id} if user_id else {}
-    initial_data = {"user": user} if user_id else {}
+    user_filter = {"id": user_id}
+    initial_data = {"user": user}
 
     if request.method == "POST":
         form = LeavesForm(
@@ -271,25 +415,19 @@ def leave_edit(request, user_id, leave_id):
         if form.is_valid():
             leave_form = form.save(commit=False)
             leave_form.responsible = request.user
-            if user_id:
-                leave.user = user_id
+            leave.user = user_id
             leave_form = form.save()
             current_leave = search_current_leave(leave.user)
             if current_leave:
-                current_leave.update_leave_status(current_leave=True)
+                make_user_unavailable(leave.user)
             else:
                 make_user_available(leave.user)
-            messages.success(request, "Afastamento editado")
 
             if settings.SEND_EMAILS == True:
                 # get user
-                try:
-                    user = get_user_model().objects.get(id=leave.user)
-                except get_user_model().DoesNotExist:
-                    messages.error(request, "Usuário não encontrado")
-                    return redirect("leave_edit", args=[user_id, leave_id])
-                
-                if user and user.email:
+                user = get_user_model().objects.get(id=leave.user)
+
+                if user.email:
                     try:
                         start_date = leave.start_date.strftime("%d/%m/%Y")
                         end_date = leave.end_date.strftime("%d/%m/%Y")
@@ -297,7 +435,11 @@ def leave_edit(request, user_id, leave_id):
 
                         current_site = get_current_site(request)
                         domain = current_site.domain
-                        url = f"http://{domain}{reverse('leaves_active_history', args=[leave.user])}"
+                        url = f"http://{domain}{reverse('leaves_active_history', args=[leave.user.id])}"
+
+                        subject = f"Afastamento Editado"
+                        sender = settings.EMAIL_SENDER
+                        recipient_list = [f"{user.email}"]
 
                         email_content = f"""\
                         <html>
@@ -308,46 +450,41 @@ def leave_edit(request, user_id, leave_id):
                         </html>
                         """
 
-                        subject = f"Afastamento Editado"
-                        sender = "svc.app@dnit.gov.br"
-                        recipient = f"{user.email}"
-
-                        msg = MIMEMultipart()
-
-                        msg["Subject"] = subject
-                        msg["From"] = sender
-                        msg["To"] = recipient
-
-                        msg.attach(MIMEText(email_content, "html"))
+                        text_content = strip_tags(
+                            email_content
+                        )  # generates text version
 
                         try:
-                            server = smtplib.SMTP("10.100.10.45")
-                            text = msg.as_string()
-                            server.sendmail(sender, recipient, text)
-                            server.quit()
+                            email = EmailMultiAlternatives(
+                                subject, text_content, sender, recipient_list
+                            )
+                            email.attach_alternative(email_content, "text/html")
+                            email.send()
                             messages.success(
-                                request, f"Email enviado para {recipient}"
+                                request, f"Email enviado para {recipient_list}."
                             )
                         except Exception as e:
-                            print(
-                                f"LEAVE_EDIT | Erro no envio do email para {recipient}: {str(e)}"
+                            logger.error(
+                                f"LEAVE_EDIT | Erro no envio do email para {recipient_list}: {str(e)}."
                             )
                             messages.error(
-                                request, f"Erro no envio do email para {recipient}"
+                                request,
+                                f"Erro no envio do email para {recipient_list}.",
                             )
 
                     except Exception as e:
-                        print(
-                            f"LEAVE_EDIT | Erro ao enviar email para {recipient}: {str(e)}"
+                        logger.error(
+                            f"LEAVE_EDIT | Erro ao enviar email para {recipient_list}: {str(e)}."
                         )
                         messages.error(
-                            request, f"Erro ao enviar email para {recipient}"
+                            request, f"Erro ao enviar email para {recipient_list}."
                         )
 
-            return redirect("leaves_active_history", args=[user_id])
+            messages.success(request, "Afastamento editado.")
+            return redirect("leaves_active_history", leave.user.id)
 
         else:
-            messages.error(request, "Dados inválidos, tente novamente")
+            messages.error(request, "Dados inválidos, tente novamente.")
             return render(
                 request,
                 "leaves/edit.html",
@@ -379,371 +516,317 @@ def leave_edit(request, user_id, leave_id):
 
 
 @login_required
-@group_required('manage_users')
-def leave_create(request, id=None):
-    user_filter = {"id": id} if id else {}
-    initial_data = {"user": id} if id else {}
-    return_page_action = (
-        reverse("leaves_active_history", args=[id])
-        if id
-        else reverse("leaves_view")
-    )
-
-    if request.method == "POST":
-        form = LeavesForm(
-            request.POST,
-            user_filter=user_filter,
-            initial=initial_data,
-        )
-
-        if form.is_valid():
-            leave = form.save(commit=False)
-            leave.responsible = request.user
-            if id:
-                leave.user = id
-            leave.save()
-            current_leave = search_current_leave(leave.user)
-            if current_leave:
-                current_leave.update_leave_status(current_leave=True)
-            else:
-                make_user_available(leave.user)
-            messages.success(request, "Afastamento Cadastrado")
-
-            if settings.SEND_EMAILS == True:
-                # get user
-                try:
-                    user = get_user_model().objects.get(id=leave.user)
-                except get_user_model().DoesNotExist:
-                    messages.error(request, "Usuário não encontrado")
-                    return redirect("leaves_view")
-
-                if user and user.email:
-                    try:
-                        start_date = leave.start_date.strftime("%d/%m/%Y")
-                        end_date = leave.end_date.strftime("%d/%m/%Y")
-                        leave_description = leave.get_description_display()
-
-                        current_site = get_current_site(request)
-                        domain = current_site.domain
-                        url = f"http://{domain}{reverse('leaves_active_history', args=[leave.user])}"
-
-                        email_content = f"""\
-                        <html>
-                            <body>
-                                <p>Olá, {leave.user}. Um novo registro de {leave_description} ({start_date} - {end_date}) foi distribuído à você por {leave.responsible}.</p>
-                                <p>Veja em: <a href="{url}" target="_blank" rel="noopener noreferrer">Afastamentos</a></p>
-                            </body>
-                        </html>
-                        """
-
-                        subject = f"Registro de {leave_description}"
-                        sender = "svc.app@dnit.gov.br"
-                        recipient = f"{user.email}"
-
-                        msg = MIMEMultipart()
-
-                        msg["Subject"] = subject
-                        msg["From"] = sender
-                        msg["To"] = recipient
-
-                        msg.attach(MIMEText(email_content, "html"))
-
-                        try:
-                            server = smtplib.SMTP("10.100.10.45")
-                            text = msg.as_string()
-                            server.sendmail(sender, recipient, text)
-                            server.quit()
-                            messages.success(
-                                request, f"Email enviado para {recipient}"
-                            )
-                        except Exception as e:
-                            print(
-                                f"LEAVE_CREATE | Erro no envio do email para {recipient}: {str(e)}"
-                            )
-                            messages.error(
-                                request, f"Erro no envio do email para {recipient}"
-                            )
-
-                    except Exception as e:
-                        print(
-                            f"LEAVE_CREATE | Erro ao enviar email para {recipient}: {str(e)}"
-                        )
-                        messages.error(
-                            request, f"Erro ao enviar email para {recipient}"
-                        )
-
-        else:
-            messages.error(request, f"Dados inválidos, tente novamente")
-            return render(
-                request,
-                "leaves/create.html",
-                {
-                    "form": form,
-                    "return_page_action": return_page_action,
-                },
-            )
-
-        return redirect("leaves_active_history", args=[leave.user])
-
+def leaves_active_history(request, user_id):
+    # get user
+    if user_id:
+        try:
+            user = get_user_model().objects.get(id=user_id)
+        except get_user_model().DoesNotExist:
+            messages.error(request, "Usuário não encontrado.")
+            return redirect("leaves_view")
     else:
-        form = LeavesForm(
-            user_filter=user_filter,
-            initial=initial_data,
+        messages.error(request, "Forneça o ID do usuário.")
+        return redirect("leaves_view")
+
+    can_manage_users = user_is_in_group(request, "manage_users")
+
+    # ensures user status update
+    current_leave = search_current_leave(user)
+    if current_leave:
+        make_user_unavailable(user)
+    else:
+        make_user_available(user)
+
+    records = Leaves.objects.filter(
+        user=user,
+        interrupted=False,
+    ).order_by("-start_date")
+
+    data_list = []
+
+    for record in records:
+        start_date = record.start_date.strftime("%d/%m/%Y")
+        end_date = record.end_date.strftime("%d/%m/%Y")
+
+        remaining_days = record.end_date - now().date()
+        show_actions = remaining_days.days >= 0
+
+        data_list.append(
+            {
+                "history": record,
+                "period": f"{start_date} - {end_date}",
+                "description": record.get_description_display(),
+                "observation": (record.observation or "---------"),
+                "show_actions": show_actions,
+            }
         )
+
+    page_obj, pagination_range = make_pagination(request, data_list, settings.PER_PAGE)
+    return_page_action = reverse("leaves_view")
 
     return render(
         request,
-        "leaves/create.html",
+        "leaves/leaves_history.html",
         {
-            "form": form,
+            "user": user,
+            "page_obj": page_obj,
+            "pagination_range": pagination_range,
             "return_page_action": return_page_action,
+            "can_manage_users": can_manage_users,
         },
     )
 
 
 @login_required
-def leaves_active_history(request, pk):
-    procurador = get_object_or_404(get_user_model(), pk=pk)
-    if procurador:
-        current_leave = search_current_leave(procurador)
-        if current_leave:
-            current_leave.atualizar_status(current_leave=True)
-        else:
-            make_user_available(procurador)
-        registros = Leaves.objects.filter(
-            procurador=procurador,
-            interrompido=False,
-        ).order_by("-data_inicio")
-
-        dados = []
-
-        for registro in registros:
-            diferenca = registro.data_fim - now().date()
-            dias_restantes = diferenca.days
-            show_actions = dias_restantes >= 0
-
-            dados.append(
-                {
-                    "historico": registro,
-                    "data_inicio": registro.data_inicio.strftime("%d/%m/%Y"),
-                    "data_fim": registro.data_fim.strftime("%d/%m/%Y"),
-                    "descricao": registro.get_descricao_display(),
-                    "observacao": (registro.observacao or "---------"),
-                    "show_actions": show_actions,
-                }
-            )
-
-        page_obj, pagination_range = make_pagination(request, dados, settings.PER_PAGE)
-        return_page_action = reverse("afastamentos_view")
-
-        return render(
-            request,
-            "afastamentos/afastamentos_historico.html",
-            {
-                "procurador": procurador,
-                "page_obj": page_obj,
-                "pagination_range": pagination_range,
-                "return_page_action": return_page_action,
-            },
-        )
-
+def leaves_interrupted_history(request, user_id):
+    # get user
+    if user_id:
+        try:
+            user = get_user_model().objects.get(id=user_id)
+        except get_user_model().DoesNotExist:
+            messages.error(request, "Usuário não encontrado.")
+            return redirect("leaves_view")
     else:
-        return redirect("afastamentos_view")
+        messages.error(request, "Forneça o ID do usuário.")
+        return redirect("leaves_view")
 
+    can_manage_users = user_is_in_group(request, "manage_users")
 
-@login_required
-def leaves_interrupted_history(request, pk):
-    procurador = get_object_or_404(get_user_model(), pk=pk)
-    registros = Leaves.objects.filter(
-        procurador=procurador,
-        interrompido=True,
-    ).order_by("-data_inicio")
+    # ensures user status update
+    current_leave = search_current_leave(user)
+    if current_leave:
+        make_user_unavailable(user)
+    else:
+        make_user_available(user)
 
-    dados = []
+    records = Leaves.objects.filter(
+        user=user,
+        interrupted=True,
+    ).order_by("-start_date")
 
-    for registro in registros:
-        diferenca = registro.data_fim - now().date()
-        dias_restantes = diferenca.days
-        show_action = dias_restantes >= 0
+    data_list = []
 
-        dados.append(
+    for record in records:
+        start_date = record.start_date.strftime("%d/%m/%Y")
+        end_date = record.end_date.strftime("%d/%m/%Y")
+
+        remaining_days = record.end_date - now().date()
+        show_action = remaining_days.days >= 0
+
+        data_list.append(
             {
-                "historico": registro,
-                "data_inicio": registro.data_inicio.strftime("%d/%m/%Y"),
-                "data_fim": registro.data_fim.strftime("%d/%m/%Y"),
-                "descricao": registro.get_descricao_display(),
-                "observacao": (registro.observacao or "---------"),
+                "history": record,
+                "period": f"{start_date} - {end_date}",
+                "description": record.get_description_display(),
+                "observation": (record.observation or "---------"),
                 "show_action": show_action,
             }
         )
 
-    page_obj, pagination_range = make_pagination(request, dados, settings.PER_PAGE)
-    return_page_action = reverse("afastamentos_view")
+    page_obj, pagination_range = make_pagination(request, data_list, settings.PER_PAGE)
+    return_page_action = reverse("leaves_view")
 
     return render(
         request,
-        "afastamentos/afastamentos_interrompidos.html",
+        "leaves/leaves_history.html",
         {
-            "hidden": "hidden",
-            "procurador": procurador,
+            "user": user,
             "page_obj": page_obj,
             "pagination_range": pagination_range,
             "return_page_action": return_page_action,
+            "can_manage_users": can_manage_users,
+            "interrupted": "interrupted",
         },
     )
 
 
 @login_required
-@group_required('manage_users')
-def leave_interrupt(request, pk, afastamento_id):
+@transaction.atomic
+@group_required("manage_users")
+def leave_interrupt(request, user_id, leave_id):
     if request.method == "POST":
-        afastamento = get_object_or_404(Leaves, pk=afastamento_id)
-        afastamento.interrompido = True
-        afastamento.save()
-        current_leave = search_current_leave(afastamento.procurador_id)
-        if current_leave:
-            current_leave.atualizar_status(current_leave=True)
+        # get user
+        if user_id:
+            try:
+                user = get_user_model().objects.get(id=user_id)
+            except get_user_model().DoesNotExist:
+                messages.error(request, "Usuário não encontrado.")
+                return redirect("leaves_view")
         else:
-            make_user_available(afastamento.procurador_id)
-        messages.success(request, "Afastamento Interrompido")
+            messages.error(request, "Forneça o ID do usuário.")
+            return redirect("leaves_view")
 
-        if settings.ENVIAR_EMAILS == True:
-            procurador = get_object_or_404(
-                get_user_model(), pk=afastamento.procurador_id
-            )
-            if procurador and procurador.email:
+        # get leave
+        if leave_id:
+            try:
+                leave = Leaves.objects.get(id=leave_id)
+            except Leaves.DoesNotExist:
+                messages.error(request, "Registro não encontrado.")
+                return redirect("leaves_active_history", user_id)
+        else:
+            messages.error(request, "Forneça o ID do registro.")
+            return redirect("leaves_active_history", user_id)
+
+        if leave.user.id != user_id:
+            messages.error(request, "Usuário e afastamento não correspondentes.")
+            return redirect("leaves_active_history", user_id)
+
+        leave.interrupted = True
+        leave.save()
+
+        # check if status changed
+        current_leave = search_current_leave(leave.user)
+        if current_leave:
+            make_user_unavailable(leave.user)
+        else:
+            make_user_available(leave.user)
+
+        if settings.SEND_EMAILS == True:
+            if leave.user.email:
                 try:
-                    data_de_inicio = afastamento.data_inicio.strftime("%d/%m/%Y")
-                    data_de_fim = afastamento.data_fim.strftime("%d/%m/%Y")
-                    descricao_afastamento = afastamento.get_descricao_display()
+                    start_date = leave.start_date.strftime("%d/%m/%Y")
+                    end_date = leave.end_date.strftime("%d/%m/%Y")
+                    leave_description = leave.get_description_display()
 
-                    # Obtém o domínio absoluto
                     current_site = get_current_site(request)
                     domain = current_site.domain
-                    url = f"http://{domain}{reverse('afastamentos_interrompidos', args=[afastamento.procurador_id])}"
+                    url = f"http://{domain}{reverse('leaves_interrupted_history', args=[leave.user.id])}"
 
-                    corpo_envio = f"""\
+                    subject = f"{leave_description} Interrompido"
+                    sender = settings.EMAIL_SENDER
+                    recipient_list = [f"{leave.user.email}"]
+
+                    email_content = f"""\
                     <html>
                         <body>
-                            <p>Olá, {afastamento.procurador}. {descricao_afastamento} ({data_de_inicio} - {data_de_fim}) foi interrompido por {afastamento.responsavel}.</p>
+                            <p>Olá, {leave.user}. {leave_description} ({start_date} - {end_date}) foi interrompido(a) por {leave.responsible}.</p>
                             <p>Veja em: <a href="{url}" target="_blank" rel="noopener noreferrer">Afastamentos</a></p>
                         </body>
                     </html>
                     """
 
-                    # Configuração do E-mail a ser enviado
-                    remetente = "sv.app@dnit.gov.br"
-                    destinatario = f"{procurador.email}"
-                    # destinatario = "lucas.carregozi@dnit.gov.br"
-                    assunto = f"{descricao_afastamento} Interrompido"
-
-                    # Criar um objeto de mensagem multiparte
-                    msg = MIMEMultipart()
-
-                    # Definir cabeçalhos de correio eletrônico
-                    msg["From"] = remetente
-                    msg["To"] = destinatario
-                    msg["Subject"] = assunto
-
-                    # Adicionar o corpo da mensagem de correio eletrônico
-                    msg.attach(MIMEText(corpo_envio, "html"))
+                    text_content = strip_tags(email_content)  # generates text version
 
                     try:
-                        server = smtplib.SMTP("10.100.10.45")
-                        text = msg.as_string()
-                        server.sendmail(remetente, destinatario, text)
-                        server.quit()
-                        messages.success(request, f"Email enviado para {destinatario}")
+                        email = EmailMultiAlternatives(
+                            subject, text_content, sender, recipient_list
+                        )
+                        email.attach_alternative(email_content, "text/html")
+                        email.send()
+                        messages.success(
+                            request, f"Email enviado para {recipient_list}."
+                        )
                     except Exception as e:
-                        print(
-                            f"INTERROMPER_AFASTAMENTO | Erro no envio do email para {destinatario}: {str(e)}"
+                        logger.error(
+                            f"LEAVE_INTERRUPT | Erro no envio do email para {recipient_list}: {str(e)}."
                         )
                         messages.error(
-                            request, f"Erro no envio do email para {destinatario}"
+                            request, f"Erro no envio do email para {recipient_list}."
                         )
 
                 except Exception as e:
-                    print(
-                        f"INTERROMPER_AFASTAMENTO | Erro ao enviar email para {destinatario}: {str(e)}"
+                    logger.error(
+                        f"LEAVE_INTERRUPT | Erro ao enviar email para {recipient_list}: {str(e)}."
                     )
-                    messages.error(request, f"Erro ao enviar email para {destinatario}")
+                    messages.error(
+                        request, f"Erro ao enviar email para {recipient_list}."
+                    )
 
-    return redirect("afastamentos_historico", pk=pk)
+        messages.success(request, "Afastamento interrompido.")
+    return redirect("leaves_active_history", user_id)
 
 
 @login_required
-@group_required('manage_users')
-def leave_resume(request, pk, afastamento_id):
+@transaction.atomic
+@group_required("manage_users")
+def leave_resume(request, user_id, leave_id):
     if request.method == "POST":
-        afastamento = get_object_or_404(Leaves, pk=afastamento_id)
-        afastamento.interrompido = False
-        afastamento.save()
-        current_leave = search_current_leave(afastamento.procurador_id)
-        if current_leave:
-            current_leave.atualizar_status(current_leave=True)
+        # get user
+        if user_id:
+            try:
+                user = get_user_model().objects.get(id=user_id)
+            except get_user_model().DoesNotExist:
+                messages.error(request, "Usuário não encontrado.")
+                return redirect("leaves_view")
         else:
-            make_user_available(afastamento.procurador_id)
-        messages.success(request, "Afastamento Retomado")
+            messages.error(request, "Forneça o ID do usuário.")
+            return redirect("leaves_view")
 
-        if settings.ENVIAR_EMAILS == True:
-            procurador = get_object_or_404(
-                get_user_model(), pk=afastamento.procurador_id
-            )
-            if procurador and procurador.email:
+        # get leave
+        if leave_id:
+            try:
+                leave = Leaves.objects.get(id=leave_id)
+            except Leaves.DoesNotExist:
+                messages.error(request, "Registro não encontrado.")
+                return redirect("leaves_active_history", user_id)
+        else:
+            messages.error(request, "Forneça o ID do registro.")
+            return redirect("leaves_active_history", user_id)
+
+        if leave.user.id != user_id:
+            messages.error(request, "Ocorreu um erro.")
+            return redirect("leaves_active_history", user_id)
+
+        leave.interrupted = False
+        leave.save()
+
+        # check if status changed
+        current_leave = search_current_leave(leave.user)
+        if current_leave:
+            make_user_unavailable(leave.user)
+        else:
+            make_user_available(leave.user)
+
+        if settings.SEND_EMAILS == True:
+            if leave.user.email:
                 try:
-                    data_de_inicio = afastamento.data_inicio.strftime("%d/%m/%Y")
-                    data_de_fim = afastamento.data_fim.strftime("%d/%m/%Y")
-                    descricao_afastamento = afastamento.get_descricao_display()
+                    start_date = leave.start_date.strftime("%d/%m/%Y")
+                    end_date = leave.end_date.strftime("%d/%m/%Y")
+                    leave_description = leave.get_description_display()
 
-                    # Obtém o domínio absoluto
                     current_site = get_current_site(request)
                     domain = current_site.domain
-                    url = f"http://{domain}{reverse('afastamentos_historico', args=[afastamento.procurador_id])}"
+                    url = f"http://{domain}{reverse('leaves_active_history', args=[leave.user.id])}"
 
-                    corpo_envio = f"""\
+                    subject = f"{leave_description} Retomado"
+                    sender = settings.EMAIL_SENDER
+                    recipient_list = [f"{leave.user.email}"]
+
+                    email_content = f"""\
                     <html>
                         <body>
-                            <p>Olá, {afastamento.procurador}. {descricao_afastamento} ({data_de_inicio} - {data_de_fim}) foi retomado por {afastamento.responsavel}.</p>
+                            <p>Olá, {leave.user}. {leave_description} ({start_date} - {end_date}) foi retomado por {leave.responsible}.</p>
                             <p>Veja em: <a href="{url}" target="_blank" rel="noopener noreferrer">Afastamentos</a></p>
                         </body>
                     </html>
                     """
 
-                    # Configuração do E-mail a ser enviado
-                    remetente = "sv.app@dnit.gov.br"
-                    destinatario = f"{procurador.email}"
-                    # destinatario = "lucas.carregozi@dnit.gov.br"
-                    assunto = f"{descricao_afastamento} Retomado"
-
-                    # Criar um objeto de mensagem multiparte
-                    msg = MIMEMultipart()
-
-                    # Definir cabeçalhos de correio eletrônico
-                    msg["From"] = remetente
-                    msg["To"] = destinatario
-                    msg["Subject"] = assunto
-
-                    # Adicionar o corpo da mensagem de correio eletrônico
-                    msg.attach(MIMEText(corpo_envio, "html"))
+                    text_content = strip_tags(email_content)  # generates text version
 
                     try:
-                        server = smtplib.SMTP("10.100.10.45")
-                        text = msg.as_string()
-                        server.sendmail(remetente, destinatario, text)
-                        server.quit()
-                        messages.success(request, f"Email enviado para {destinatario}")
+                        email = EmailMultiAlternatives(
+                            subject, text_content, sender, recipient_list
+                        )
+                        email.attach_alternative(email_content, "text/html")
+                        email.send()
+                        messages.success(
+                            request, f"Email enviado para {recipient_list}."
+                        )
                     except Exception as e:
-                        print(
-                            f"RETOMAR_AFASTAMENTO | Erro no envio do email para {destinatario}: {str(e)}"
+                        logger.error(
+                            f"LEAVE_RESUME | Erro no envio do email para {recipient_list}: {str(e)}."
                         )
                         messages.error(
-                            request, f"Erro no envio do email para {destinatario}"
+                            request, f"Erro no envio do email para {recipient_list}."
                         )
 
                 except Exception as e:
-                    print(
-                        f"RETOMAR_AFASTAMENTO | Erro ao enviar email para {destinatario}: {str(e)}"
+                    logger.error(
+                        f"LEAVE_RESUME | Erro ao enviar email para {recipient_list}: {str(e)}."
                     )
-                    messages.error(request, f"Erro ao enviar email para {destinatario}")
+                    messages.error(
+                        request, f"Erro ao enviar email para {recipient_list}."
+                    )
 
-    return redirect("afastamentos_interrompidos", pk=pk)
+        messages.success(request, "Afastamento retomado.")
+    return redirect("leaves_interrupted_history", user_id)

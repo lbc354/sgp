@@ -1,0 +1,36 @@
+{% extends 'global/base.html' %}
+
+{% block title %}
+  Afastamentos Histórico
+{% endblock %}
+
+{% block path %}
+  <span><a href="{% url 'home' %}" class="link-secondary link-underline-opacity-25">Início</a></span>
+  <span>&gt;</span>
+  <span><a href="{% url 'leaves_view' %}" class="link-secondary link-underline-opacity-25">Afastamentos</a></span>
+  <span>&gt;</span>
+  <span class="text-secondary">Histórico</span>
+{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 my-4">
+    <h1 class="">Histórico de {{ user }}</h1>
+    <div class="d-flex align-items-center gap-2 ms-auto">
+      {% if interrupted %}
+        <a href="{% url 'leaves_active_history' user.id %}" class="btn btn-light border">Ativos</a>
+      {% else %}
+        <a href="{% url 'leaves_interrupted_history' user.id %}" class="btn btn-light border">Interrompidos</a>
+      {% endif %}
+
+      {% if can_manage_users %}
+        <a href="{% url 'leave_create_id' user.id %}" class="btn btn-primary d-flex align-items-center ms-auto"><span class="d-none d-sm-block">Adicionar</span><i class="bi bi-plus"></i></a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="d-flex row g-2 mb-2">
+    {% include 'global/partials/search_table.html' %}
+  </div>
+
+  {% include 'leaves/partials/tb_leaves_history.html' %}
+{% endblock %}

@@ -15,7 +15,7 @@ class CustomUser(AbstractUser):
     # created_at = models.DateTimeField(auto_now_add=True)  # similar to date_joined
     updated_at = models.DateTimeField(auto_now=True)
 
-    # let's pretend the user is not available to do something or to have something linked to him
+    # let's pretend the user is not available to do something or to have something linked to him (like time_off)
     available = models.BooleanField(default=True)
 
     def __str__(self):

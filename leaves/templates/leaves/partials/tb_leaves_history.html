@@ -1,0 +1,121 @@
+{% load static %}
+<div class="draggable-table table-responsive">
+  <table class="table table-striped table-bordered table-hover">
+    <thead class="thead-dark">
+      <tr>
+        {% if can_manage_users %}
+          <th class="tb-action" scope="col">Ações</th>
+        {% endif %}
+        <th scope="col">Período</th>
+        <th scope="col">Descrição</th>
+        <th scope="col">Observação</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for obj in page_obj %}
+        <tr>
+          {% if can_manage_users %}
+            <td>
+              <div class="dropdown">
+                {% if obj.show_actions or obj.show_action %}
+                  <button class="btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-three-dots-vertical"></i></button>
+                {% endif %}
+                <ul class="dropdown-menu">
+                  {% if obj.show_actions %}
+                    <li>
+                      <a class="dropdown-item" href="{% url 'leave_edit' user.id obj.history.id %}">Editar</a>
+                    </li>
+                    <li>
+                      <button type="button" class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#modalInterrupt" data-url="{% url 'leave_interrupt' user.id obj.history.id %}">Interromper</button>
+                    </li>
+                  {% endif %}
+                  {% if obj.show_action %}
+                    <li>
+                      <button type="button" class="dropdown-item text-primary" data-bs-toggle="modal" data-bs-target="#modalResume" data-url="{% url 'leave_resume' user.id obj.history.id %}">Retomar</button>
+                    </li>
+                  {% endif %}
+                </ul>
+              </div>
+            </td>
+          {% endif %}
+
+          <td title="{{ obj.period }}">{{ obj.period }}</td>
+          <td title="{{ obj.description }}">{{ obj.description }}</td>
+          <td title="{{ obj.observation }}">{{ obj.observation }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="50">Nenhum registro encontrado</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="d-flex align-items-center justify-content-between mt-3">
+  <div></div>
+  {% include 'global/partials/pagination.html' %}
+</div>
+
+{% comment %}modal to interrupt{% endcomment %}
+<div class="modal fade" id="modalInterrupt" tabindex="-1" aria-labelledby="modalInterruptLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title fs-5" id="modalInterruptLabel">Confirmação</h3>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">Interromper este afastamento?</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form id="interruptForm" method="POST">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger">Interromper</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% comment %}modal to resume{% endcomment %}
+<div class="modal fade" id="modalResume" tabindex="-1" aria-labelledby="modalResumeLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title fs-5" id="modalResumeLabel">Confirmação</h3>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">Retomar este afastamento?</div>
+      <div class="modal-footer">
+        <form id="resumeForm" method="POST">
+          {% csrf_token %}
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Retomar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // modal to interrupt
+    const modalInterrupt = document.getElementById('modalInterrupt')
+    modalInterrupt.addEventListener('show.bs.modal', function (event) {
+      const button = event.relatedTarget
+      const url = button.getAttribute('data-url')
+      const form = document.getElementById('interruptForm')
+      form.action = url
+    })
+    // modal to resume
+    const modalResume = document.getElementById('modalResume')
+    modalResume.addEventListener('show.bs.modal', function (event) {
+      const button = event.relatedTarget
+      const url = button.getAttribute('data-url')
+      const form = document.getElementById('resumeForm')
+      form.action = url
+    })
+  })
+</script>
+
+<script src="{% static 'js/draggable_table.js' %}"></script>

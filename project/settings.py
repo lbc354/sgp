@@ -9,6 +9,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "INSECURE")
 DEBUG = True
 PER_PAGE = 20
 SEND_EMAILS = False
+EMAIL_SENDER = "lbarroscarregozi@gmail.com"
 DEFAULT_USER_PASSWORD = "@PassWord123"
 
 ALLOWED_HOSTS = ["*"]
@@ -50,7 +51,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                # 
+                #
                 "utils.context_processors.users_count",
             ],
         },
@@ -114,12 +115,12 @@ MESSAGE_TAGS = {
 #  access https://myaccount.google.com/security and activate two-step verification
 # then access https://myaccount.google.com/apppasswords and create the app password
 # you'll receive a 16 characters password. keep it.
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'lbarroscarregozi@gmail.com'
-EMAIL_HOST_PASSWORD = 'mpty tojb qrda vtvg'
+EMAIL_HOST_USER = "lbarroscarregozi@gmail.com"
+EMAIL_HOST_PASSWORD = "mpty tojb qrda vtvg"
 
 if DEBUG == False:
     STATICFILES_STORAGE = (

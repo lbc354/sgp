@@ -1,4 +1,4 @@
-# usage example (/project/settings.py)
+# usage example of context_processors (/project/settings.py)
 from users.models import CustomUser
 
 

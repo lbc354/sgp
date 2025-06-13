@@ -32,7 +32,9 @@ def deny_if_not_in_group(request, *group_names):
     return None
 
 
-# check user groups
+# check user groups (always returns true or false)
 def user_is_in_group(request, *group_names):
+    if not request.user.is_authenticated:
+        return False
     user_groups = request.user.groups.values_list("name", flat=True)
     return any(group in user_groups for group in group_names)
